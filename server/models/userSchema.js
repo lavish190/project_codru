@@ -8,6 +8,8 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
+  authProvider: { type: String, default: "local" }, // Can be "local" or "google"
+  googleId: { type: String }, // Stores their unique Google ID if they use it
   password: { type: String }, 
   photo: { type: String, default: "" },
   dob: { type: String }, 

@@ -591,6 +591,7 @@ app.get("/auth/google/callback", async (req, res) => {
     let isFirstTime = false; 
 
     if (!user) {
+      // 1. BRAND NEW USER VIA GOOGLE
       let baseUsername = data.email.split('@')[0]; 
       isFirstTime = true;
       
@@ -600,7 +601,10 @@ app.get("/auth/google/callback", async (req, res) => {
         username: baseUsername,
         photo: data.picture,
         isEmailVerified: true,
-        role: "User" 
+        role: "User",
+        googleId: data.id,           // 🚨 Track their Google ID
+        authProvider: "google"       // 🚨 Track signup method
+        // Notice: Password is intentionally left blank!
       });
 
       try {
@@ -647,7 +651,21 @@ app.get("/auth/google/callback", async (req, res) => {
           }
         });
       }
-    } 
+    }
+    
+    else {
+      // 2. 🚨 ACCOUNT LINKING MAGIC 🚨
+      // User exists (signed up via form previously). Link their Google account now!
+      if (!user.googleId) {
+        user.googleId = data.id;
+        user.authProvider = "google-linked";
+        // Optionally update their photo if they didn't upload one manually
+        if (!user.photo && data.picture) {
+            user.photo = data.picture;
+        }
+        await user.save();
+      }
+    }
 
     const token = jwt.sign({ _id: user._id }, process.env.TOKEN_SECRET, {
       expiresIn: "14d",

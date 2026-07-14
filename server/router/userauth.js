@@ -597,6 +597,12 @@ router.post("/signin", async (req, res) => {
       return res.status(403).json({ error: "Your account has been suspended. Please contact support." });
     }
 
+    if (!user.password) {
+      return res.status(400).json({ 
+        error: "You originally signed up with Google! Please click 'Sign in with Google' or use 'Forgot Password' to create a manual password." 
+      });
+    }
+
     // 3. Check the password
     const isMatched = await bcrypt.compare(password, user.password);
 
@@ -748,53 +754,53 @@ router.post("/admission/:username", async (req, res) => {
 // 🚨 ADD 'authenticate' middleware here to protect the route!
 router.post("/change-password", authenticate, async (req, res) => {
   try {
-    // 🚨 We no longer need 'username' from the frontend!
     const { currentPassword, newPassword } = req.body;
 
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: "Empty field(s)" });
+    if (!newPassword) {
+      return res.status(400).json({ error: "New password is required" });
     }
 
-    // 🚨 SECURE: Grab the exact user ID from the verified JWT token
     const userId = req.user._id; 
-
     let user = await User.findById(userId);
-    if (!user) {
-      return res.status(400).json({ error: "User not found" });
+    
+    if (!user) return res.status(400).json({ error: "User not found" });
+
+    // 🚨 SMART CHECK: Only verify currentPassword if they actually have one!
+    if (user.password) {
+      if (!currentPassword) {
+         return res.status(400).json({ error: "Please enter your current password to change it." });
+      }
+      const isMatched = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatched) {
+        return res.status(400).json({ error: "Wrong current password" });
+      }
     }
 
-    const isMatched = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatched) {
-      return res.status(400).json({ error: "Wrong current password" });
-    }
-
-    // 1. Update Password
-    // (Assuming you have a Mongoose pre-save hook that hashes the password automatically. 
-    // If not, you must bcrypt.hash(newPassword) right here!)
+    // 1. Update Password (Your pre-save hook handles the hashing)
     user.password = newPassword;
     await user.save();
 
-    // 2. 🚨 IN-APP NOTIFICATION
+    // 2. IN-APP NOTIFICATION
     await sendAutoNotification(
       req.app,
       user._id,
-      "🔒 Security Alert: Your password was successfully changed.",
+      "🔒 Security Alert: Your password was successfully updated.",
       "settings",
-      req.user.username // 👈 This now works perfectly because of 'authenticate'!
+      req.user.username 
     );
 
-    // 3. 🚨 EMAIL NOTIFICATION
+    // 3. EMAIL NOTIFICATION
     const emailHtml = actionTemplate(
       user.name || user.username,
-      "Security Alert: Password Changed",
-      "Your account password was successfully updated. If you did not authorize this change, please reset your password immediately or contact support.",
-      "#f59e0b" // Warning Amber
+      "Security Alert: Password Updated",
+      "Your account password was successfully set/updated. You can now use this to log in.",
+      "#f59e0b" 
     );
 
     const mailOptions = {
       from: process.env.EMAIL,
       to: user.email,
-      subject: "Password Changed Successfully",
+      subject: "Password Updated Successfully",
       html: emailHtml
     };
 
@@ -802,13 +808,13 @@ router.post("/change-password", authenticate, async (req, res) => {
       if (error) console.error("Failed to send password change email:", error);
     });
 
-    // Send success response instantly (doesn't wait for the email to finish sending)
-    res.status(200).json({ message: "Password changed successfully" });
+    res.status(200).json({ message: "Password updated successfully!" });
   } catch (error) {
     console.error("Change Password Error:", error);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 router.post("/reset-password", async (req, res) => {
   try {
     const { username } = req.body;
