@@ -80,7 +80,8 @@ const AccountSettings = ({ userData, setUserData }: SettingsPanelProps) => {
       const response = await fetch(`${import.meta.env.VITE_API}change-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, currentPassword, newPassword }),
+        credentials: "include", // 🚨 THIS SENDS THE COOKIE! 🚨
+        body: JSON.stringify({ currentPassword, newPassword }), // username removed
       });
 
       if (response.ok) {
@@ -90,8 +91,10 @@ const AccountSettings = ({ userData, setUserData }: SettingsPanelProps) => {
         setCurrentPassword("");
         setNewPassword("");
       } else {
+        // You can actually grab the exact error message from your backend now!
+        const errorData = await response.json();
         setAlertSeverity("error");
-        setAlertMessage("Error changing password.");
+        setAlertMessage(errorData.error || "Error changing password.");
         setShowAlert(true);
       }
     } catch (error) {
