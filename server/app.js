@@ -31,7 +31,11 @@ app.get('/health', (req, res) => {
 
 const io = new Server(server, { 
   cors: { 
-    origin: process.env.FRONTEND_URL,
+    origin: [
+      process.env.FRONTEND_URL,
+      "https://app.curiousteamlearning.com", // Hardcoded just to be 100% safe
+      "http://localhost:5173"                // Keeps local development working!
+    ],
     credentials: true
   } 
 });
