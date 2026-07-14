@@ -667,9 +667,26 @@ app.get("/auth/google/callback", async (req, res) => {
       }
     }
 
-    const token = jwt.sign({ _id: user._id }, process.env.TOKEN_SECRET, {
-      expiresIn: "14d",
-    });
+    const token = jwt.sign(
+      { 
+        _id: user._id, 
+        username: user.username, 
+        role: user.role, 
+        isAdmin: user.isAdmin 
+      }, 
+      process.env.TOKEN_SECRET, 
+      { expiresIn: "14d" }
+    );
+
+    const fourteenDaysInMs = 14 * 24 * 60 * 60 * 1000; 
+    const cookieExpire = process.env.COOKIEEXPIRE ? Number(process.env.COOKIEEXPIRE) : fourteenDaysInMs;
+    
+    const options = {
+      expires: new Date(Date.now() + cookieExpire), 
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", 
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
+    };
 
     const baseURL = process.env.FRONTEND_URL.replace(/\/$/, ""); 
     const safeReturnTo = returnTo.startsWith("/") ? returnTo : `/${returnTo}`;
@@ -680,7 +697,7 @@ app.get("/auth/google/callback", async (req, res) => {
       finalUrl.searchParams.append("new", "true");
     }
 
-    res.redirect(finalUrl.toString());
+    res.cookie("token", token, options).redirect(finalUrl.toString());
     
   } catch (error) {
     console.error("Google Auth Error:", error);
