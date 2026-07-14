@@ -77,9 +77,13 @@ const AccountSettings = ({ userData, setUserData }: SettingsPanelProps) => {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const token = localStorage.getItem("jwtoken");
       const response = await fetch(`${import.meta.env.VITE_API}change-password`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         credentials: "include", // 🚨 THIS SENDS THE COOKIE! 🚨
         body: JSON.stringify({ currentPassword, newPassword }), // username removed
       });
