@@ -51,11 +51,23 @@ io.on("connection", (socket) => {
 app.set('io', io);
 
 startCalendarCron(app);
+// 1. Define the allowed origins
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "https://app.curiousteamlearning.com",
+  "http://localhost:5173"
+];
 
-app.use(cors( {
-  origin: "*",
-  httpOnly: true,
-  credentials: true,
+// 2. The Smart CORS Configuration
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, origin); // Dynamically echoes the exact frontend URL back!
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true, // Now this is 100% legal and secure
 }));
 app.use(express.json());
 
