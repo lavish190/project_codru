@@ -9,7 +9,6 @@ const authenticate = require('../middleware/authenticate'); // Fixed import form
 const router = express.Router();
 
 // 1. Initialize Web Push 
-// 1. Initialize Web Push SAFELY
 try {
   if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
     webpush.setVapidDetails(

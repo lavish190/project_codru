@@ -5,8 +5,6 @@ const authenticate = require("../middleware/authenticate"); // Adjust path as ne
 const { MasterNode, UserNode } = require("../models/syllabusNodeSchema"); // Adjust path as needed
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-// Assuming you have an 'authenticate' middleware
-// const authenticate = require("../middleware/authenticate");
 
 // ==========================================
 // 1. GET USER COURSES (Top Level Tabs)

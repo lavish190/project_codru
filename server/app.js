@@ -482,9 +482,18 @@ app.put("/calendar-events/:id", authenticate, async (req, res) => {
 });
 
 app.get("/auth/google", (req, res) => {
+  const callbackPort = req.query.callbackPort || "";
+  const source = req.query.source || ""; // Catch the desktop source
+  const returnTo = req.query.returnTo || req.query.state || "/";
+
+  // Encode callbackPort, source, and returnTo into a base64 state string
+  const stateData = JSON.stringify({ callbackPort, source, returnTo });
+
   const url = oauth2Client.generateAuthUrl({
     access_type: "offline",
+    prompt: "select_account", // Forces account selection (good for desktop!)
     scope: ["https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"],
+    state: Buffer.from(stateData).toString("base64"),
   });
   res.redirect(url);
 });
@@ -592,7 +601,22 @@ app.post("/calendar-events", authenticate, async (req, res) => {
 
 app.get("/auth/google/callback", async (req, res) => {
   const code = req.query.code;
-  const returnTo = req.query.state || "/"; 
+
+  // 1. Decode state (from File 2)
+  let callbackPort = "";
+  let source = "";
+  let returnTo = "/";
+  try {
+    const stateRaw = req.query.state;
+    if (stateRaw) {
+      const parsed = JSON.parse(Buffer.from(stateRaw, "base64").toString("utf8"));
+      callbackPort = parsed.callbackPort || "";
+      source = parsed.source || "";
+      returnTo = parsed.returnTo || "/";
+    }
+  } catch (e) {
+    returnTo = req.query.state || "/";
+  }
 
   if (!code) return res.status(400).json({ error: "Code missing from Google" });
 
@@ -607,7 +631,7 @@ app.get("/auth/google/callback", async (req, res) => {
     let isFirstTime = false; 
 
     if (!user) {
-      // 1. BRAND NEW USER VIA GOOGLE
+      // BRAND NEW USER VIA GOOGLE (From File 1)
       let baseUsername = data.email.split('@')[0]; 
       isFirstTime = true;
       
@@ -618,9 +642,8 @@ app.get("/auth/google/callback", async (req, res) => {
         photo: data.picture,
         isEmailVerified: true,
         role: "User",
-        googleId: data.id,           // 🚨 Track their Google ID
-        authProvider: "google"       // 🚨 Track signup method
-        // Notice: Password is intentionally left blank!
+        googleId: data.id,           
+        authProvider: "google"       
       });
 
       try {
@@ -630,52 +653,40 @@ app.get("/auth/google/callback", async (req, res) => {
         await user.save();
       }
 
-      // 🚨 NEW USER HANDSHAKE (Admin Notification + Welcome Email)
+      // NEW USER HANDSHAKE (Admin Notification + Welcome Email)
       if (isFirstTime) {
-        // 1. Notify Admins
         try {
           const admins = await User.find({ isAdmin: true });
           const notifyPromises = admins.map((admin) => 
             sendAutoNotification(
-              req.app,              // Socket.io instance
+              req.app,
               admin._id,
               `🌐 New Google Sign-up: ${user.name} (@${user.username}) just joined!`,
               "manage-users",
-              user.username // 🕵️‍♂️ Audit: Who is this new user?
+              user.username
             )
-
           );
           await Promise.all(notifyPromises);
         } catch (err) { console.error("Admin notify error:", err); }
 
-        // 2. Welcome Email
         const welcomeHtml = welcomeTemplate(user.name || user.username);
-        
         const mailOptions = {
           from: process.env.EMAIL,
           to: user.email,
           subject: "Welcome to Curious Team Learning! 🚀",
-          // 🚨 Swap 'text' for 'html'
           html: welcomeHtml 
         };
   
         transporter.sendMail(mailOptions, (error, info) => {
-          if (error) {
-            console.error("Failed to send welcome email:", error);
-          } else {
-            console.log("Welcome email sent: " + info.response);
-          }
+          if (error) console.error("Failed to send welcome email:", error);
         });
       }
-    }
-    
+    } 
     else {
-      // 2. 🚨 ACCOUNT LINKING MAGIC 🚨
-      // User exists (signed up via form previously). Link their Google account now!
+      // 🚨 ACCOUNT LINKING MAGIC 🚨 (Kept from File 1!)
       if (!user.googleId) {
         user.googleId = data.id;
         user.authProvider = "google-linked";
-        // Optionally update their photo if they didn't upload one manually
         if (!user.photo && data.picture) {
             user.photo = data.picture;
         }
@@ -683,6 +694,7 @@ app.get("/auth/google/callback", async (req, res) => {
       }
     }
 
+    // Generate Token
     const token = jwt.sign(
       { 
         _id: user._id, 
@@ -694,6 +706,37 @@ app.get("/auth/google/callback", async (req, res) => {
       { expiresIn: "14d" }
     );
 
+    // 🚨 DESKTOP APP DEEP LINK REDIRECT (From File 2)
+    if (source === "desktop") {
+      let callbackUrl = `cutelearning://auth-callback?token=${token}`;
+      if (isFirstTime) callbackUrl += "&new=true";
+      
+      return res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Login Successful</title></head>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding-top: 50px; background: #f4f7f6;">
+          <h2 style="color: #2e7d32;">✅ Login Successful!</h2>
+          <p style="color: #555;">Redirecting you back to the CuTe Learning App...</p>
+          <script>
+            window.location.href = "${callbackUrl}";
+            setTimeout(() => {
+              document.body.innerHTML += '<p style="margin-top:20px; color:#666;">If nothing happens, <a href="${callbackUrl}" style="color:#007bff; text-decoration:none; font-weight:bold;">Click Here</a>.</p>';
+            }, 2500);
+          </script>
+        </body>
+        </html>
+      `);
+    }
+
+    // LEGACY LOCALHOST PORT REDIRECT (From File 2)
+    if (callbackPort) {
+      let callbackUrl = `http://127.0.0.1:${callbackPort}/auth-callback?token=${token}`;
+      if (isFirstTime) callbackUrl += "&new=true";
+      return res.redirect(callbackUrl);
+    }
+
+    // WEB REDIRECT WITH COOKIE (Kept from File 1!)
     const fourteenDaysInMs = 14 * 24 * 60 * 60 * 1000; 
     const cookieExpire = process.env.COOKIEEXPIRE ? Number(process.env.COOKIEEXPIRE) : fourteenDaysInMs;
     
