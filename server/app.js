@@ -706,9 +706,14 @@ app.get("/auth/google/callback", async (req, res) => {
       { expiresIn: "14d" }
     );
 
-    // 🚨 DESKTOP APP DEEP LINK REDIRECT (From File 2)
+    // 🚨 DESKTOP APP DEEP LINK REDIRECT
     if (source === "desktop") {
-      let callbackUrl = `cutelearning://auth-callback?token=${token}`;
+      const safeName = encodeURIComponent(user.name || "");
+      const safePhoto = encodeURIComponent(user.photo || "");
+      const safeRole = encodeURIComponent(user.role || "User");
+      const isAdminStr = user.isAdmin ? "true" : "false";
+
+      let callbackUrl = `cutelearning://auth-callback?token=${token}&username=${user.username}&name=${safeName}&photo=${safePhoto}&role=${safeRole}&isAdmin=${isAdminStr}`;
       if (isFirstTime) callbackUrl += "&new=true";
       
       return res.send(`
