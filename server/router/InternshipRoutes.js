@@ -86,6 +86,11 @@ const resumeSchema = {
   required: ["name", "email", "phone"]
 };
 
+const toTitleCase = (str) => {
+  if (!str) return "";
+  return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
+};
+
 // ==========================================
 // STEP 1: Upload to Drive & Parse with AI
 // ==========================================
@@ -264,7 +269,7 @@ router.post("/submit-application", async (req, res) => {
         resumeDriveId: driveId,
         resumeDriveLink: driveLink,
         personalDetails: {
-          name: formData.name,
+          name: toTitleCase(formData.name),
           email: formData.email,
           phone: formData.phone,
           whatsapp: formData.whatsapp,
@@ -273,7 +278,7 @@ router.post("/submit-application", async (req, res) => {
         programDetails: {
           intent: formData.intent,
           type: formData.type,
-          topic: formData.topic,
+          topic: toTitleCase(formData.topic),
           startDate: formData.startDate,
           endDate: formData.endDate,
           durationDays: formData.days, // Mapped 'days' to 'durationDays'
@@ -343,7 +348,7 @@ router.post("/verify-new-user-submit", async (req, res) => {
       resumeDriveId: driveId,
       resumeDriveLink: driveLink,
       personalDetails: {
-        name: formData.name,
+        name: toTitleCase(formData.name),
         email: formData.email,
         phone: formData.phone,
         whatsapp: formData.whatsapp,
@@ -352,7 +357,7 @@ router.post("/verify-new-user-submit", async (req, res) => {
       programDetails: {
         intent: formData.intent,
         type: formData.type,
-        topic: formData.topic,
+        topic: toTitleCase(formData.topic),
         startDate: formData.startDate,
         endDate: formData.endDate,
         durationDays: formData.days,
