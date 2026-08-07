@@ -12,7 +12,7 @@ const Internship = require("../models/InternshipSchema");
 const User = require("../models/userSchema");
 const authenticate = require("../middleware/authenticate"); 
 const OTP = require("../models/otpSchema"); 
-
+const { toTitleCase } = require('../utils/formatters');
 const upload = multer({ storage: multer.memoryStorage() });
 const jwt = require("jsonwebtoken");
 const transporter = require('../utils/transporter'); 
@@ -84,11 +84,6 @@ const resumeSchema = {
     phone: { type: SchemaType.STRING, description: "10-digit mobile number" }
   },
   required: ["name", "email", "phone"]
-};
-
-const toTitleCase = (str) => {
-  if (!str) return "";
-  return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
 };
 
 // ==========================================
