@@ -18,6 +18,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "form-data": "^4.0.5",
     "framer-motion": "^12.38.0",
@@ -29,11 +30,13 @@
     "nodemailer": "^8.0.5",
     "nodemon": "^3.1.14",
     "path": "^0.12.7",
-    "pdfmake": "^0.3.8",
+    "pdf-parse": "^1.1.1",
+    "pdfmake": "^0.3.11",
     "phonepe-pg-sdk-node": "^2.0.2",
     "server": "file:",
     "socket.io": "^4.8.3",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "xlsx": "^0.18.5"
   },
   "overrides": {
     "jwa": "^1.4.2"

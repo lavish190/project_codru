@@ -927,6 +927,49 @@ router.post("/verify-email", async (req, res) => {
   }
 });
 
+// ==========================================
+// 3. VERIFY OTP & LOGIN ROUTE (For Resume Drop)
+// ==========================================
+router.post("/verify-otp-login", async (req, res) => {
+  try {
+    const { email, otp } = req.body; 
+
+    // 1. Verify the OTP
+    const record = await OTP.findOne({ email: email });
+    if (!record || record.otp !== otp.toString()) {
+      return res.status(401).json({ error: "Invalid or expired OTP. Please try again." });
+    }
+
+    // 2. Find the existing user in the database
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ error: "Account not found." });
+    }
+
+    // 3. OTP is valid! Delete it.
+    await OTP.deleteMany({ email: email });
+
+    // 4. Generate the JWT Token (Adjust this if you have a specific method on your User schema like user.generateAuthToken())
+    const token = jwt.sign({ _id: user._id }, process.env.TOKEN_SECRET, { expiresIn: "7d" });
+
+    // 5. Send back the token and user details to log them in
+    res.status(200).json({ 
+      message: "Login successful", 
+      token, 
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        username: user.username
+      } 
+    });
+
+  } catch (err) {
+    console.error("OTP Login Error:", err);
+    res.status(500).json({ error: "Server error during login" });
+  }
+});
+
 // Profile edit route
 router.post("/profile-edit", async (req, res) => {
   try {

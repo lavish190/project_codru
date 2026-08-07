@@ -7,9 +7,11 @@ import { CalendarToday } from "@mui/icons-material";
 interface FunDatePickerProps {
   value: string | null;
   onChange: (date: string | null) => void;
+  label?: string; // 🚨 NEW: Make label dynamic (optional)
 }
 
-export default function FunDatePicker({ value, onChange }: FunDatePickerProps) {
+// 🚨 NEW: Destructure label with a fallback default
+export default function FunDatePicker({ value, onChange, label = "Select Date" }: FunDatePickerProps) {
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <DatePicker
@@ -23,7 +25,7 @@ export default function FunDatePicker({ value, onChange }: FunDatePickerProps) {
         slotProps={{
           textField: {
             fullWidth: true,
-            label: "Date of Birth", // 🚨 CHANGED from placeholder to label to make it float!
+            label: label, // 🚨 NEW: Use the dynamic label here!
             sx: {
               "& .MuiOutlinedInput-root": {
                 borderRadius: "12px",
@@ -33,11 +35,9 @@ export default function FunDatePicker({ value, onChange }: FunDatePickerProps) {
           },
           inputAdornment: {
             position: "start",
-            // This line styles the icon wrapper with your brand blue!
             className: "text-brand-blue", 
           },
           openPickerIcon: {
-            // We ensure the icon itself uses your specific blue shade
             className: "text-brand-blue", 
           }
         }}

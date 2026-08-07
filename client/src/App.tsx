@@ -24,12 +24,9 @@ import Popup from "./components/Popup";
 import NotFound from "./components/NotFound";
 import SyllabusExplorer from "./components/SyllabusExplorer";
 import ForgetPassword from "./components/Forget_password";
-
-import PaymentSuccess from "./components/PaymentSuccess";
+import InternshipPortal from "./components/InternshipPortal";
 import FinalBuy from "./components/FinalBuy";
 import PaymentHistory from "./components/PaymentHistory";
-import PaymentFailed from "./components/PaymentFailed";
-import PaymentCancelled from "./components/PaymentCancelled";
 import PaymentStatus from "./components/PaymentStatus";
 import EnrollPage from "./components/Enrol";
 
@@ -621,13 +618,13 @@ function App() {
               path="/payment-status" // Note: PhonePe is currently configured to redirect to this URL
               element={<PaymentStatus />}
             />
-                        {/* FINAL BUY */}
-                        <Route
-                          path="/finalBuy"
-                          element={<FinalBuy />}
-                        />
+            {/* FINAL BUY */}
+            <Route
+              path="/finalBuy"
+              element={<FinalBuy />}
+            />
 
-                        {/* PAYMENT HISTORY */}
+            {/* PAYMENT HISTORY */}
             <Route
               path="/payment-history"
               element={<PaymentHistory />}
@@ -637,6 +634,11 @@ function App() {
             <Route
               path="/enroll"
               element={<EnrollPage />}
+            />
+            {/* INTERNSHIP PORTAL */}
+            <Route
+              path="/work-with-us"
+              element={<InternshipPortal />}
             />
 
             {/* NOT FOUND */}
