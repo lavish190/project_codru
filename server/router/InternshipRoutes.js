@@ -278,7 +278,8 @@ router.post("/submit-application", async (req, res) => {
           endDate: formData.endDate,
           durationDays: formData.days, // Mapped 'days' to 'durationDays'
           price: formData.price,
-          mode: formData.mode || "Remote"
+          mode: formData.mode || "Remote",
+          offerLetterDate: formData.offerLetterDate ? formData.offerLetterDate : null
         }
       },
       { upsert: true, new: true }
@@ -355,7 +356,9 @@ router.post("/verify-new-user-submit", async (req, res) => {
         startDate: formData.startDate,
         endDate: formData.endDate,
         durationDays: formData.days,
-        price: formData.price
+        price: formData.price,
+        mode: formData.mode || "Remote",
+        offerLetterDate: formData.offerLetterDate ? formData.offerLetterDate : null
       }
     });
 

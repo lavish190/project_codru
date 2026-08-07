@@ -60,7 +60,9 @@ const InternshipPortal = () => {
     feedback: "",
     rating: 5,
     futureInterest: "yes",
-    majorLearnings: ""
+    majorLearnings: "",
+    useCustomOfferDate: false,
+    offerLetterDate: ""
   });
 
   // 1. FETCH STATUS & HYDRATE ALL SAVED DATA
@@ -91,6 +93,8 @@ const InternshipPortal = () => {
               // 🚨 Hydrating dates so they survive a refresh!
               startDate: data.savedData.programDetails?.startDate || "",
               endDate: data.savedData.programDetails?.endDate || "",
+              useCustomOfferDate: !!data.savedData.programDetails?.offerLetterDate,
+              offerLetterDate: data.savedData.programDetails?.offerLetterDate || "",
               driveId: data.savedData.resumeDriveId || "",
               driveLink: data.savedData.resumeDriveLink || "",
             }));
@@ -556,6 +560,36 @@ const InternshipPortal = () => {
                   onChange={(newDate) => setFormData(prev => ({ ...prev, endDate: newDate || "" }))} 
                 />
               </div>
+            </div>
+
+            {/* 🚨 NEW: Custom Offer Letter Date UI */}
+            <div className="mt-4 bg-gray-50 p-4 rounded-xl border border-gray-200 mb-2">
+              <FormControlLabel 
+                control={
+                  <Checkbox 
+                    checked={formData.useCustomOfferDate} 
+                    onChange={(e) => setFormData(prev => ({ 
+                      ...prev, 
+                      useCustomOfferDate: e.target.checked, 
+                      offerLetterDate: e.target.checked ? prev.offerLetterDate : "" // Clear it if they uncheck
+                    }))} 
+                    sx={{ color: '#1765a4', '&.Mui-checked': { color: '#1765a4' } }} 
+                  />
+                } 
+                label={<span className="text-sm font-medium text-gray-700">My college requires a specific date on the Offer Letter</span>} 
+              />
+              
+              <AnimatePresence>
+                {formData.useCustomOfferDate && (
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="mt-4 overflow-hidden">
+                    <FunDatePicker 
+                      label="Custom Offer Letter Date"
+                      value={formData.offerLetterDate} 
+                      onChange={(newDate) => setFormData(prev => ({ ...prev, offerLetterDate: newDate || "" }))} 
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {formData.days > 0 && (

@@ -41,6 +41,7 @@ const internshipSchema = new mongoose.Schema({
       enum: ["Remote", "On-site"], 
       default: "Remote" 
     },
+    offerLetterDate: { type: Date },
   },
 
   completionDetails: {

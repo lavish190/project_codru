@@ -1,4 +1,9 @@
 const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 // ==========================================
 // SHARED EMAIL BRANDING (Header & Footer)
@@ -140,11 +145,13 @@ const generateOfferLetterPdf = async (app) => {
   const name = app.personalDetails.name;
   const type = app.programDetails.type || "Internship"; 
   const duration = app.programDetails.durationDays;
-  const startDate = dayjs(app.programDetails.startDate).format("DD MMMM YYYY");
-  const endDate = dayjs(app.programDetails.endDate).format("DD MMMM YYYY");
+  const startDate = dayjs(app.programDetails.startDate).tz("Asia/Kolkata").format("DD MMMM YYYY");
+  const endDate = dayjs(app.programDetails.endDate).tz("Asia/Kolkata").format("DD MMMM YYYY");
   const topic = app.programDetails.topic; 
   const mode = app.programDetails.mode || "Remote"; 
-  const currentDate = dayjs().format("DD-MM-YY");
+  const currentDate = app.programDetails.offerLetterDate 
+    ? dayjs(app.programDetails.offerLetterDate).tz("Asia/Kolkata").format("DD-MM-YY")
+    : dayjs().tz("Asia/Kolkata").format("DD-MM-YY");
 
   const locationText = mode === "On-site"
     ? `Your place of ${type} that will resume from ${startDate} to ${endDate}, shall be on-site at our office located at Shop No.: 1, 2 R. K. Puram, Sector A, Kota. - 324010 during this duration.`
@@ -208,8 +215,8 @@ const generateCertificatePdf = async (app) => {
   const randomAngle = Math.floor(Math.random() * 91) - 45;
   const isTraining = type.toLowerCase() === 'training';
   const displayType = isTraining ? 'Training' : 'Internship';
-  const startDate = dayjs(app.programDetails.startDate).format("D MMM. YYYY");
-  const endDate = dayjs(app.programDetails.endDate).format("D MMM. YYYY");
+  const startDate = dayjs(app.programDetails.startDate).tz("Asia/Kolkata").format("D MMM. YYYY");
+  const endDate = dayjs(app.programDetails.endDate).tz("Asia/Kolkata").format("D MMM. YYYY");
   const barcodeStr = app.completionDetails?.barcodeStr || "N/A";
 
   const backgroundImageUrl = isTraining 
