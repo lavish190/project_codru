@@ -866,19 +866,21 @@ router.post("/generate-otp", async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email is required" });
 
+    // 🚨 1. NORMALIZE THE EMAIL
+    // This forces everything to lowercase and removes accidental spaces
+    const cleanEmail = email.toLowerCase().trim();
+
     // Generate a 4-digit OTP
     const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
     
-    // Delete any old OTPs for this email so they don't clash
-    await OTP.deleteMany({ email: email });
-
-    // Save the new OTP to our temporary database collection
-    await OTP.create({ email: email, otp: generatedOtp });
+    // 🚨 2. Use 'cleanEmail' for all database operations
+    await OTP.deleteMany({ email: cleanEmail });
+    await OTP.create({ email: cleanEmail, otp: generatedOtp });
 
     // Send the Email
     const mailOptions = {
       from: process.env.EMAIL,
-      to: email,
+      to: cleanEmail, // 🚨 Use 'cleanEmail' here too
       subject: "Email Verification - CuTe Learning",
       html: otpTemplate(generatedOtp),
     };
@@ -897,25 +899,29 @@ router.post("/generate-otp", async (req, res) => {
   }
 });
 
-// ==========================================
+/// ==========================================
 // 2. VERIFY OTP ROUTE (Signup Proof)
 // ==========================================
 router.post("/verify-email", async (req, res) => {
   try {
     const { email, otp } = req.body; 
 
-    // Look inside our temporary OTP collection
-    const record = await OTP.findOne({ email: email });
+    // 🚨 1. NORMALIZE INPUTS
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanOtp = otp.toString().trim();
+
+    // 🚨 2. Search using clean email AND sort to get the newest one!
+    const record = await OTP.findOne({ email: cleanEmail }).sort({ createdAt: -1 });
 
     if (!record) {
       return res.status(401).send({ error: "OTP expired or not found. Please resend." });
     }
 
     // Check if it matches exactly
-    if (record.otp === otp.toString()) {
+    if (record.otp === cleanOtp) {
       
       // Success! Delete it so it can't be used twice
-      await OTP.deleteMany({ email: email });
+      await OTP.deleteMany({ email: cleanEmail });
 
       res.status(200).send({ message: "Verification successful" });
     } else {
@@ -934,25 +940,29 @@ router.post("/verify-otp-login", async (req, res) => {
   try {
     const { email, otp } = req.body; 
 
-    // 1. Verify the OTP
-    const record = await OTP.findOne({ email: email });
-    if (!record || record.otp !== otp.toString()) {
+    // 🚨 1. NORMALIZE INPUTS
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanOtp = otp.toString().trim();
+
+    // 🚨 2. Verify the OTP (Search with clean email and sort by newest)
+    const record = await OTP.findOne({ email: cleanEmail }).sort({ createdAt: -1 });
+    if (!record || record.otp !== cleanOtp) {
       return res.status(401).json({ error: "Invalid or expired OTP. Please try again." });
     }
 
-    // 2. Find the existing user in the database
-    const user = await User.findOne({ email: email.toLowerCase() });
+    // 3. Find the existing user in the database
+    const user = await User.findOne({ email: cleanEmail });
     if (!user) {
       return res.status(404).json({ error: "Account not found." });
     }
 
-    // 3. OTP is valid! Delete it.
-    await OTP.deleteMany({ email: email });
+    // 4. OTP is valid! Delete it.
+    await OTP.deleteMany({ email: cleanEmail });
 
-    // 4. Generate the JWT Token (Adjust this if you have a specific method on your User schema like user.generateAuthToken())
+    // 5. Generate the JWT Token (Adjust this if you have a specific method on your User schema like user.generateAuthToken())
     const token = jwt.sign({ _id: user._id }, process.env.TOKEN_SECRET, { expiresIn: "7d" });
 
-    // 5. Send back the token and user details to log them in
+    // 6. Send back the token and user details to log them in
     res.status(200).json({ 
       message: "Login successful", 
       token, 
