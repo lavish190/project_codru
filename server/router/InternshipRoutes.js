@@ -17,7 +17,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 const jwt = require("jsonwebtoken");
 const transporter = require('../utils/transporter'); 
 const ProgramIndex = require("../models/ProgramIndex");
-const { approvalEmailTemplate, rejectionEmailTemplate, generateOfferLetterPdf, generateCertificatePdf, completionEmailTemplate } = require('../utils/internshipTemplates');
+const { approvalEmailTemplate, rejectionEmailTemplate, generateOfferLetterPdf, generateCertificatePdf, completionEmailTemplate } = require('../utils/InternshipTemplates');
 
 const pdfmake = require('pdfmake');
 
