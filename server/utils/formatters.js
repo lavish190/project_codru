@@ -126,13 +126,31 @@ const toTitleCase = (str) => {
   // 1. Standard Title Case
   let formattedStr = str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
 
-  // 2. Apply the exact tech branding from the dictionary above
+  // 2. Apply the exact tech branding from the dictionary
   for (const [wrongCase, correctCase] of Object.entries(techExceptions)) {
     const regex = new RegExp(`\\b${wrongCase}\\b`, 'g');
     formattedStr = formattedStr.replace(regex, correctCase);
   }
 
-  return formattedStr;
+  // 3. Remove redundant certificate words
+  const wordsToRemove = [
+    "Internship",
+    "Intern",
+    "Training",
+    "Program",
+    "Course",
+    "Certification",
+    "Certificate"
+  ];
+
+  wordsToRemove.forEach(word => {
+    // \b ensures we ONLY remove exact matches, keeping names totally safe
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    formattedStr = formattedStr.replace(regex, "");
+  });
+
+  // 4. Clean up any double spaces left behind and trim edges
+  return formattedStr.replace(/\s+/g, " ").trim();
 };
 
 module.exports = {
