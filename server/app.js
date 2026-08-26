@@ -35,6 +35,7 @@ const io = new Server(server, {
     origin: [
       process.env.FRONTEND_URL,
       "https://app.curiousteamlearning.com", // Hardcoded just to be 100% safe
+      "https://curiousteamlearning.com",
       "http://localhost:5173"                // Keeps local development working!
     ],
     credentials: true
