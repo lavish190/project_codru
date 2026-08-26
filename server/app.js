@@ -20,6 +20,7 @@ const adminOtpTemplate = require("./utils/adminOtpTemplate");
 const OTP = require("./models/otpSchema");
 const transporter = require('./utils/transporter'); // Adjust the path if needed
 const paymentRoutes = require("./router/paymentRoutes");
+const { userBrochureTemplate, adminBrochureTemplate } = require("./utils/brochureTemplates");
 
 dotenv.config({ path: "./config.env" });
 const app = express();
@@ -2356,6 +2357,178 @@ app.put("/expert-connect/schedule/:connectionId", authenticate, async (req, res)
     res.status(500).json({ error: "Failed to schedule meeting." });
   }
 });
+
+// ==========================================
+// PROGRAM PLAN LEADS (Secured Sales Funnel)
+// ==========================================
+
+// 🛡️ ANTI-SPAM: In-memory Rate Limiter (No extra npm packages needed!)
+const leadSpamCache = new Map();
+const SPAM_LIMIT = 3; // Max requests
+const SPAM_WINDOW = 15 * 60 * 1000; // 15 minutes
+
+app.post("/get-plan-details", async (req, res) => {
+  try {
+    const { name, email, phone, whatsapp, is_whatsapp, plan_interest } = req.body;
+
+    // 1. Basic Validation
+    if (!name || !email || !phone || !plan_interest) {
+      return res.status(400).json({ error: "Missing required fields." });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const spamKey = `${clientIp}_${cleanEmail}`;
+
+    // 2. 🛡️ ANTI-SPAM CHECK
+    const now = Date.now();
+    const spamRecord = leadSpamCache.get(spamKey);
+
+    if (spamRecord) {
+      if (now - spamRecord.firstRequest < SPAM_WINDOW) {
+        if (spamRecord.count >= SPAM_LIMIT) {
+          return res.status(429).json({ error: "Too many requests. Please check your email or try again later." });
+        }
+        spamRecord.count += 1;
+      } else {
+        // Window expired, reset
+        leadSpamCache.set(spamKey, { count: 1, firstRequest: now });
+      }
+    } else {
+      leadSpamCache.set(spamKey, { count: 1, firstRequest: now });
+    }
+
+    // 3. 🛡️ DE-DUPLICATION CHECK
+    // Did they already ask for THIS SPECIFIC plan?
+    let lead = await PlanLead.findOne({ email: cleanEmail, plan_interest: plan_interest });
+    const existingUser = await User.findOne({ email: cleanEmail });
+
+    let customTrackingUrl = "";
+
+    if (lead) {
+      // ✅ They already asked for this! Just reuse their existing link.
+      customTrackingUrl = lead.trackingUrl;
+      console.log(`[Lead] Re-sending existing brochure to ${cleanEmail}`);
+    } else {
+      // ✅ Brand new request! Create it.
+      lead = new PlanLead({
+        name,
+        email: cleanEmail,
+        phone,
+        whatsapp: whatsapp || phone,
+        is_whatsapp,
+        plan_interest,
+        userId: existingUser ? existingUser._id : null
+      });
+
+      await lead.save();
+
+      // Generate and save the Custom Secure Tracking URL
+      const frontendBaseUrl = process.env.FRONTEND_URL || "https://app.curiousteamlearning.com";
+      customTrackingUrl = `${frontendBaseUrl}/plan-details/${lead._id}`;
+      
+      lead.trackingUrl = customTrackingUrl;
+      await lead.save();
+    }
+
+
+    // ----------------------------------------------------
+    // COMMUNICATION BLOCK
+    // ----------------------------------------------------
+
+    // 4A. EMAIL TO THE USER
+    const userMailOptions = {
+      from: process.env.EMAIL,
+      to: lead.email,
+      subject: `Your Details for the ${plan_interest} - CuTe Learning`,
+      html: userBrochureTemplate(name, plan_interest, customTrackingUrl)
+    };
+    transporter.sendMail(userMailOptions, (err) => { if (err) console.error("User Email Error:", err); });
+
+    // 4B. EMAIL TO ADMIN
+    const adminMailOptions = {
+      from: process.env.EMAIL,
+      to: process.env.EMAIL,
+      subject: `🔥 ${lead.isNew ? 'NEW LEAD' : 'REPEAT REQUEST'}: ${plan_interest} (${name})`,
+      html: adminBrochureTemplate(name, plan_interest, phone, lead.whatsapp, lead.email, !!existingUser, customTrackingUrl)
+    };
+    transporter.sendMail(adminMailOptions, (err) => { if (err) console.error("Admin Email Error:", err); });
+
+    // 4C. IN-APP NOTIFICATIONS TO ADMINS
+    try {
+      const admins = await User.find({ isAdmin: true });
+      const notifyPromises = admins.map(admin => 
+        sendAutoNotification(
+          req.app, 
+          admin._id, 
+          `🔥 Lead Alert: ${name} requested the ${plan_interest}!`, 
+          "crm", 
+          "Sales Bot"
+        )
+      );
+      await Promise.all(notifyPromises);
+    } catch (notifErr) {
+      console.error("Admin App Notification Error:", notifErr);
+    }
+
+    // 4D. WHATSAPP MESSAGE
+    try {
+      const botNumberId = process.env.PHONE_NUMBER_ID || "1049944734868137"; 
+      
+      const waPayload = {
+        messaging_product: "whatsapp",
+        to: lead.whatsapp.replace(/\D/g, ""), // Strips out symbols
+        type: "template",
+        template: {
+          name: "plan_details", // 🚨 Updated template name
+          language: { code: "en" },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: name },          
+                { type: "text", text: plan_interest }  
+              ]
+            },
+            {
+              type: "button",
+              sub_type: "url",
+              index: "0", 
+              parameters: [
+                { type: "text", text: lead._id.toString() } 
+              ]
+            }
+          ]
+        }
+      };
+
+      await axios.post(
+        `https://graph.facebook.com/v19.0/${botNumberId}/messages`,
+        waPayload,
+        { headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` } }
+      );
+    } catch (waErr) {
+      console.error("WhatsApp Send Error:", waErr.response?.data || waErr.message);
+    }
+
+    // 5. FINISH
+    res.status(200).json({ success: true, message: "Details sent successfully!" });
+
+  } catch (error) {
+    console.error("Plan Lead Capture Error:", error);
+    res.status(500).json({ error: "Failed to process your request. Please try again." });
+  }
+});
+
+// 🧹 CRON JOB: Clean up the anti-spam memory cache every hour to prevent memory leaks
+setInterval(() => {
+  const now = Date.now();
+  for (let [key, value] of leadSpamCache.entries()) {
+    if (now - value.firstRequest > SPAM_WINDOW) {
+      leadSpamCache.delete(key);
+    }
+  }
+}, 60 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 
