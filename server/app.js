@@ -20,6 +20,7 @@ const adminOtpTemplate = require("./utils/adminOtpTemplate");
 const OTP = require("./models/otpSchema");
 const transporter = require('./utils/transporter'); // Adjust the path if needed
 const paymentRoutes = require("./router/paymentRoutes");
+const PlanLead = require("./models/planLeadSchema");
 const { userBrochureTemplate, adminBrochureTemplate } = require("./utils/brochureTemplates");
 
 dotenv.config({ path: "./config.env" });
