@@ -59,7 +59,10 @@ startCalendarCron(app);
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "https://app.curiousteamlearning.com",
-  "http://localhost:5173"
+  "https://curiousteamlearning.com",       // 🚨 ADD THIS: Your naked domain
+  "https://www.curiousteamlearning.com",   // 🚨 ADD THIS: Your www domain
+  "http://localhost:5173",                 // React local dev
+  "http://localhost:8788" 
 ];
 
 // 2. The Smart CORS Configuration
