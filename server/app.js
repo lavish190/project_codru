@@ -34,9 +34,11 @@ const io = new Server(server, {
   cors: { 
     origin: [
       process.env.FRONTEND_URL,
-      "https://app.curiousteamlearning.com", // Hardcoded just to be 100% safe
-      "https://curiousteamlearning.com",
-      "http://localhost:5173"                // Keeps local development working!
+      "https://app.curiousteamlearning.com",
+      "https://curiousteamlearning.com",       // 🚨 ADD THIS: Your naked domain
+      "https://www.curiousteamlearning.com",   // 🚨 ADD THIS: Your www domain
+      "http://localhost:5173",                 // React local dev
+      "http://localhost:8788"               // Keeps local development working!
     ],
     credentials: true
   } 
