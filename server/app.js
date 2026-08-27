@@ -2528,6 +2528,37 @@ app.post("/get-plan-details", async (req, res) => {
   }
 });
 
+// ==========================================
+// FETCH BROCHURE DETAILS FOR PDF VIEWER
+// ==========================================
+app.get("/api/brochure-data/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if the ID is a valid MongoDB ObjectId format to prevent crashes
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ error: "Invalid tracking link format." });
+    }
+
+    const lead = await PlanLead.findById(id);
+
+    if (!lead) {
+      return res.status(404).json({ error: "Brochure link expired or not found." });
+    }
+
+    // Return only what the frontend needs to show the PDF
+    res.status(200).json({
+      success: true,
+      name: lead.name,
+      plan_interest: lead.plan_interest
+    });
+
+  } catch (error) {
+    console.error("Fetch Brochure Error:", error);
+    res.status(500).json({ error: "Server error while fetching brochure." });
+  }
+});
+
 // 🧹 CRON JOB: Clean up the anti-spam memory cache every hour to prevent memory leaks
 setInterval(() => {
   const now = Date.now();
