@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { Loader2, AlertCircle, FileText, ZoomIn, ZoomOut, Maximize } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
@@ -19,6 +19,7 @@ const PlanViewer = () => {
   // Responsive sizing & Native Zoom State
   const [containerWidth, setContainerWidth] = useState(window.innerWidth);
   const [zoom, setZoom] = useState(1);
+  const pdfWrapperRef = useRef(null); // Used for smooth CSS Pinch zooming
   
   // Navbar Hide/Show State
   const [showNav, setShowNav] = useState(true);
@@ -48,7 +49,7 @@ const PlanViewer = () => {
     fetchBrochureData();
   }, [id]);
 
-  // 🌟 THE MAGIC: Intercept OS-level zooming to only zoom the PDF
+  // 🌟 THE MAGIC: Smooth Native Zoom Interceptor
   useEffect(() => {
     // 1. Desktop: Block Ctrl + Scroll Wheel
     const handleWheel = (e) => {
@@ -61,39 +62,52 @@ const PlanViewer = () => {
       }
     };
 
-    // 2. Mobile: Smooth Pinch Zoom Math
+    // 2. Mobile: Buttery Smooth Pinch Zoom via CSS
     let initialDist = 0;
+    let pinchScale = 1;
+
     const handleTouchStart = (e) => {
       if (e.touches.length === 2) {
         initialDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
+        pinchScale = 1;
       }
     };
 
     const handleTouchMove = (e) => {
-      if (e.touches.length === 2) {
+      if (e.touches.length === 2 && initialDist > 0) {
+        e.preventDefault(); // Stops mobile browser from overriding us
         const currentDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
-        if (initialDist > 0) {
-          const delta = currentDist - initialDist;
-          if (Math.abs(delta) > 5) { 
-            setZoom(prev => {
-              // Smooth mobile scaling multiplier
-              const newZoom = prev + (delta * 0.005); 
-              return Math.min(Math.max(0.5, newZoom), 4);
-            });
-            initialDist = currentDist;
-          }
+
+        pinchScale = currentDist / initialDist;
+
+        // Apply instant CSS transform during the pinch
+        if (pdfWrapperRef.current) {
+          pdfWrapperRef.current.style.transform = `scale(${pinchScale})`;
+          pdfWrapperRef.current.style.transformOrigin = "top center";
+          pdfWrapperRef.current.style.transition = "none";
         }
       }
     };
 
     const handleTouchEnd = (e) => {
-      if (e.touches.length < 2) initialDist = 0;
+      if (initialDist > 0 && pinchScale !== 1) {
+        // Apply the final scale to React state to render HD text
+        setZoom(prev => Math.min(Math.max(0.5, prev * pinchScale), 4));
+
+        // Reset the temporary CSS transform
+        if (pdfWrapperRef.current) {
+          pdfWrapperRef.current.style.transform = `scale(1)`;
+        }
+        
+        initialDist = 0;
+        pinchScale = 1;
+      }
     };
 
     document.addEventListener('wheel', handleWheel, { passive: false });
@@ -187,8 +201,8 @@ const PlanViewer = () => {
       </div>
 
       {/* 🌟 FLOATING ZOOM CONTROLS */}
-      {/* ✅ FIX 1: Pushed up to bottom-24 on mobile so it doesn't overlap phone browsers, bottom-8 on desktop */}
-      <div className={`absolute bottom-24 right-4 md:bottom-8 md:right-8 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
+      {/* ✅ FIX 1: FIXED position using DVH avoids Chrome scrolling bugs entirely */}
+      <div className={`fixed bottom-[12dvh] right-4 md:bottom-8 md:right-8 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
         <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
           <ZoomIn className="w-5 h-5" />
         </button>
@@ -201,37 +215,39 @@ const PlanViewer = () => {
       </div>
 
       {/* 🌟 NATIVE SCROLL CONTAINER */}
-      {/* ✅ FIX 2: touch-action: 'pan-x pan-y' tells the mobile browser to STOP native window pinching */}
       <div 
         id="pdf-scroll-container"
         className="flex-grow w-full h-full overflow-auto pt-24 pb-32" 
-        style={{ touchAction: 'pan-x pan-y' }}
+        style={{ touchAction: 'pan-x pan-y' }} // Allows 1-finger scroll, completely blocks browser 2-finger zoom
         onScroll={handleScroll}
       >
-        {/* ✅ FIX 3: Using 'w-fit mx-auto' prevents Flexbox from clipping the left side when zoomed in! */}
-        <div className="min-w-max w-full">
-          <Document
-            file={securePdfUrl}
-            onLoadSuccess={onDocumentLoadSuccess}
-            loading={<Loader2 className="w-10 h-10 text-[#1765a4] animate-spin mx-auto mt-10" />}
-            error={<p className="text-red-500 mt-10 font-bold text-center">Failed to load the secure document.</p>}
-            className="w-fit mx-auto flex flex-col gap-6 px-4"
-          >
-            {Array.from(new Array(numPages), (el, index) => (
-              <div key={`page_${index + 1}`} className="shadow-2xl rounded-sm bg-white shrink-0">
-                <Page
-                  pageNumber={index + 1}
-                  width={basePdfWidth}
-                  scale={zoom} // High-res native zoom rendering
-                  renderTextLayer={false} 
-                  renderAnnotationLayer={false} 
-                  loading={<div className="h-96 flex items-center justify-center bg-gray-50"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>}
-                />
-              </div>
-            ))}
-          </Document>
+        {/* ✅ FIX 2: w-fit min-w-full mx-auto completely destroys the left-scroll clipping bug */}
+        <div className="w-fit min-w-full mx-auto">
+          {/* ✅ FIX 3: Target for our ultra-smooth CSS Pinch Zoom layer */}
+          <div ref={pdfWrapperRef} className="flex flex-col items-center gap-6 px-4">
+            <Document
+              file={securePdfUrl}
+              onLoadSuccess={onDocumentLoadSuccess}
+              loading={<Loader2 className="w-10 h-10 text-[#1765a4] animate-spin mx-auto mt-10" />}
+              error={<p className="text-red-500 mt-10 font-bold text-center">Failed to load the secure document.</p>}
+            >
+              {Array.from(new Array(numPages), (el, index) => (
+                <div key={`page_${index + 1}`} className="mb-6 shadow-2xl rounded-sm bg-white shrink-0">
+                  <Page
+                    pageNumber={index + 1}
+                    width={basePdfWidth}
+                    scale={zoom} // High-res native zoom rendering
+                    renderTextLayer={false} 
+                    renderAnnotationLayer={false} 
+                    loading={<div className="h-96 flex items-center justify-center bg-gray-50"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>}
+                  />
+                </div>
+              ))}
+            </Document>
+          </div>
         </div>
       </div>
+
     </div>
   );
 };
