@@ -8,16 +8,10 @@ const PlanViewer = () => {
   const [error, setError] = useState(null);
   const [leadData, setLeadData] = useState(null);
 
-  // 🚨 Replace these with your actual Cloudinary/Hosted PDF links
-  const pdfLinks = {
-    "2-Year Program": "https://your-pdf-link-for-2-year.pdf",
-    "7-Year Program": "https://your-pdf-link-for-7-year.pdf",
-    "4-Year Program": "https://your-pdf-link-for-4-year.pdf"
-  };
-
   useEffect(() => {
     const fetchBrochureData = async () => {
       try {
+        // Fetch the user's name and plan name securely
         const response = await fetch(`https://api.curiousteamlearning.com/api/brochure-data/${id}`);
         const data = await response.json();
 
@@ -56,7 +50,8 @@ const PlanViewer = () => {
     );
   }
 
-  const pdfUrl = pdfLinks[leadData?.plan_interest];
+  // 🚨 The secure URL from your backend! No hardcoded PDF links needed.
+  const securePdfUrl = `https://api.curiousteamlearning.com/api/view-pdf/${id}`;
 
   return (
     <div className="min-h-screen bg-[#f7f4f1] flex flex-col">
@@ -74,32 +69,26 @@ const PlanViewer = () => {
           </div>
         </div>
         
+        {/* Download Button now points securely to the backend stream */}
         <a 
-          href={pdfUrl} 
-          download 
+          href={securePdfUrl} 
           target="_blank" 
           rel="noopener noreferrer"
           className="bg-[#ed7f23] text-white px-6 py-2.5 rounded-full font-bold shadow-md hover:-translate-y-0.5 transition-transform text-sm whitespace-nowrap"
         >
-          Download PDF
+          Open / Download PDF
         </a>
       </div>
 
-      {/* The PDF Viewer iframe */}
+      {/* The PDF Viewer iframe - securely streams from backend */}
       <div className="flex-grow w-full h-[calc(100vh-80px)] bg-gray-100">
-        {pdfUrl ? (
-            <iframe 
-                src={`https://api.curiousteamlearning.com/api/view-pdf/${id}#toolbar=0`} 
-                className="w-full h-full border-none shadow-inner"
-                title={`${leadData?.plan_interest} Brochure`}
-            >
-                <p>Your browser does not support PDFs.</p>
-            </iframe>
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-500">
-            Brochure file is currently being updated.
-          </div>
-        )}
+        <iframe 
+          src={`${securePdfUrl}#toolbar=0`} 
+          className="w-full h-full border-none shadow-inner"
+          title={`${leadData?.plan_interest} Brochure`}
+        >
+          <p>Your browser does not support PDFs.</p>
+        </iframe>
       </div>
     </div>
   );
