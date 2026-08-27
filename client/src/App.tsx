@@ -9,7 +9,7 @@ import {
 
 import { registerSW } from 'virtual:pwa-register';
 
-// --- IMPORTS ---
+import PlanViewer from "./components/PlanViewer";
 import PwaInstallPrompt from "./PwaInstallPrompt";
 import CommunicationPortal from './components/CommunicationPortal';
 import Home from "./components/Home";
@@ -639,6 +639,11 @@ function App() {
             <Route
               path="/work-with-us"
               element={<InternshipPortal />}
+            />
+
+            <Route 
+              path="/plan-details/:id" 
+              element={<PlanViewer />} 
             />
 
             {/* NOT FOUND */}

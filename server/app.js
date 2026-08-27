@@ -2559,6 +2559,56 @@ app.get("/api/brochure-data/:id", async (req, res) => {
   }
 });
 
+// ==========================================
+// SECURE PDF STREAMING ROUTE
+// ==========================================
+app.get("/api/view-pdf/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1. Validate ID
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).send("Invalid link format.");
+    }
+
+    // 2. Find the lead
+    const lead = await PlanLead.findById(id);
+    if (!lead) {
+      return res.status(404).send("Brochure link expired or not found.");
+    }
+
+    // 3. Optional: Track the view! 
+    // You can see exactly how many times a parent opens the brochure
+    lead.viewCount = (lead.viewCount || 0) + 1;
+    lead.lastViewedAt = new Date();
+    await lead.save();
+
+    // 4. Map the requested plan to your exact file names
+    const pdfFiles = {
+      "2-Year Program": "2_year_plan.pdf",
+      "4-Year Program": "4_year_plan.pdf",
+      "7-Year Program": "7_year_plan.pdf"
+    };
+
+    const fileName = pdfFiles[lead.plan_interest];
+    if (!fileName) {
+      return res.status(404).send("Brochure file not found for this program.");
+    }
+
+    // 5. Build the secure path to the file
+    const filePath = path.join(__dirname, "assets", "pdfs", fileName);
+
+    // 6. Send the file directly to the browser viewer
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "inline; filename=Curious_Team_Brochure.pdf");
+    res.sendFile(filePath);
+
+  } catch (error) {
+    console.error("PDF Streaming Error:", error);
+    res.status(500).send("Server error while loading PDF.");
+  }
+});
+
 // 🧹 CRON JOB: Clean up the anti-spam memory cache every hour to prevent memory leaks
 setInterval(() => {
   const now = Date.now();
