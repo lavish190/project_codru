@@ -4,8 +4,10 @@ import { Loader2, AlertCircle, FileText, ZoomIn, ZoomOut, Maximize } from "lucid
 import { Document, Page, pdfjs } from "react-pdf";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
-// ✅ FIX 1: Switched from unpkg to Cloudflare (cdnjs) to permanently fix the CORS error
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url,
+).toString();
 
 const PlanViewer = () => {
   const { id } = useParams();
