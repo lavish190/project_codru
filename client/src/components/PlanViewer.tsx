@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { Loader2, AlertCircle, FileText, ZoomIn, ZoomOut, Maximize } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
+// ✅ OPTION 2 (The Bulletproof Vite Fix) - Loads locally, no CORS errors ever!
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
@@ -15,9 +15,12 @@ const PlanViewer = () => {
   const [error, setError] = useState(null);
   const [leadData, setLeadData] = useState(null);
   const [numPages, setNumPages] = useState(null);
-  const [containerWidth, setContainerWidth] = useState(window.innerWidth);
   
-  // States for hiding/showing the title bar
+  // Responsive sizing & Native Zoom State
+  const [containerWidth, setContainerWidth] = useState(window.innerWidth);
+  const [zoom, setZoom] = useState(1);
+  
+  // Navbar Hide/Show State
   const [showNav, setShowNav] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
 
@@ -28,6 +31,7 @@ const PlanViewer = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Fetch API Data
   useEffect(() => {
     const fetchBrochureData = async () => {
       try {
@@ -43,6 +47,74 @@ const PlanViewer = () => {
     };
     fetchBrochureData();
   }, [id]);
+
+  // 🌟 THE MAGIC: Intercept OS-level zooming to only zoom the PDF
+  useEffect(() => {
+    // 1. Desktop: Block Ctrl + Scroll Wheel (or Mac Trackpad Pinch)
+    const handleWheel = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault(); // 🚨 Stops the whole browser window from zooming
+        setZoom(prev => {
+          // Adjust zoom speed
+          const newZoom = e.deltaY > 0 ? prev - 0.1 : prev + 0.1;
+          return Math.min(Math.max(0.5, newZoom), 4); // Limits zoom between 50% and 400%
+        });
+      }
+    };
+
+    // 2. Mobile: Block native 2-finger browser zooming
+    let initialDist = 0;
+    const handleTouchStart = (e) => {
+      if (e.touches.length === 2) {
+        initialDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault(); // 🚨 Stops mobile browser from zooming
+        const currentDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        if (initialDist > 0) {
+          const delta = currentDist - initialDist;
+          if (Math.abs(delta) > 10) { // Sensitivity threshold
+            setZoom(prev => {
+              const newZoom = delta > 0 ? prev + 0.05 : prev - 0.05;
+              return Math.min(Math.max(0.5, newZoom), 4);
+            });
+            initialDist = currentDist;
+          }
+        }
+      }
+    };
+
+    const handleTouchEnd = (e) => {
+      if (e.touches.length < 2) initialDist = 0;
+    };
+
+    // Attach listeners
+    document.addEventListener('wheel', handleWheel, { passive: false });
+    const container = document.getElementById('pdf-viewer-wrapper');
+    if (container) {
+      container.addEventListener('touchstart', handleTouchStart, { passive: false });
+      container.addEventListener('touchmove', handleTouchMove, { passive: false });
+      container.addEventListener('touchend', handleTouchEnd);
+    }
+
+    return () => {
+      document.removeEventListener('wheel', handleWheel);
+      if (container) {
+        container.removeEventListener('touchstart', handleTouchStart);
+        container.removeEventListener('touchmove', handleTouchMove);
+        container.removeEventListener('touchend', handleTouchEnd);
+      }
+    };
+  }, []);
 
   // Handle hiding/showing the title bar on scroll
   const handleScroll = (e) => {
@@ -88,18 +160,18 @@ const PlanViewer = () => {
   }
 
   const securePdfUrl = `https://api.curiousteamlearning.com/api/view-pdf/${id}`;
-  const pdfWidth = Math.min(containerWidth * 0.95, 800);
+  const basePdfWidth = Math.min(containerWidth * 0.95, 800);
 
   return (
-    // ✅ FIX 2: Changed from h-screen to relative flex-grow. This allows your main website Navbar to sit safely above it.
+    // Height calculation ensures it sits perfectly under your main website navbar
     <div 
+      id="pdf-viewer-wrapper"
       className="relative flex flex-col flex-grow w-full bg-[#e2e8f0] overflow-hidden" 
-      style={{ height: 'calc(100vh - 64px)' }} // Adjust the 64px if your main navbar is taller/shorter
+      style={{ height: 'calc(100vh - 64px)' }} 
       onContextMenu={handleContextMenu}
     >
       
       {/* 🌟 AUTO-HIDING TITLE BAR */}
-      {/* ✅ FIX 3: Changed from 'fixed' to 'absolute'. It will now hide underneath your main Navbar instead of overlapping it */}
       <div 
         className={`absolute top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 px-6 py-4 flex items-center justify-between z-40 transition-transform duration-300 ease-in-out ${showNav ? 'translate-y-0' : '-translate-y-full'}`}
       >
@@ -121,59 +193,45 @@ const PlanViewer = () => {
         </div>
       </div>
 
-      {/* 🌟 NATIVE SCROLL & ZOOM CONTAINER */}
+      {/* Floating Zoom Controls */}
+      <div className={`absolute bottom-6 right-6 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
+        <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
+          <ZoomIn className="w-5 h-5" />
+        </button>
+        <button onClick={() => setZoom(1)} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
+          <Maximize className="w-5 h-5" />
+        </button>
+        <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
+          <ZoomOut className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* 🌟 NATIVE SCROLL CONTAINER */}
       <div 
-        className="flex-grow w-full h-full overflow-y-auto touch-pan-y overscroll-none pt-24 pb-10 flex flex-col items-center" 
+        className="flex-grow w-full h-full overflow-auto pt-24 pb-10 flex flex-col items-center" 
         onScroll={handleScroll}
       >
-        <TransformWrapper
-          initialScale={1}
-          minScale={0.5}
-          maxScale={4}
-          // Only zoom if Ctrl/Cmd is held (Desktop), prevents accidental zoom while scrolling pages
-          wheel={{ activationKeys: ["Control", "Meta"] }} 
-          pinch={{ step: 5 }} // Native touchscreen pinch zoom for Android/iOS
+        <Document
+          file={securePdfUrl}
+          onLoadSuccess={onDocumentLoadSuccess}
+          loading={<Loader2 className="w-10 h-10 text-[#1765a4] animate-spin mt-10" />}
+          error={<p className="text-red-500 mt-10 font-bold">Failed to load the secure document.</p>}
+          className="flex flex-col items-center w-full pb-20"
         >
-          {({ zoomIn, zoomOut, resetTransform }) => (
-            <>
-              {/* Floating Zoom Controls (Fades out when scrolling down) */}
-              <div className={`fixed bottom-6 right-6 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
-                <button onClick={() => zoomIn()} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
-                  <ZoomIn className="w-5 h-5" />
-                </button>
-                <button onClick={() => resetTransform()} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
-                  <Maximize className="w-5 h-5" />
-                </button>
-                <button onClick={() => zoomOut()} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
-                  <ZoomOut className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* The Zoomable Canvas Area */}
-              <TransformComponent wrapperStyle={{ width: "100%", height: "auto" }}>
-                <Document
-                  file={securePdfUrl}
-                  onLoadSuccess={onDocumentLoadSuccess}
-                  loading={<Loader2 className="w-10 h-10 text-[#1765a4] animate-spin mt-10" />}
-                  error={<p className="text-red-500 mt-10 font-bold">Failed to load the secure document.</p>}
-                  className="flex flex-col items-center w-full"
-                >
-                  {Array.from(new Array(numPages), (el, index) => (
-                    <div key={`page_${index + 1}`} className="mb-6 shadow-2xl rounded-sm overflow-hidden bg-white shrink-0">
-                      <Page
-                        pageNumber={index + 1}
-                        width={pdfWidth}
-                        renderTextLayer={false} // Disables text selection
-                        renderAnnotationLayer={false} // Disables hyperlink interactions
-                        loading={<div className="h-96 flex items-center justify-center bg-gray-50"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>}
-                      />
-                    </div>
-                  ))}
-                </Document>
-              </TransformComponent>
-            </>
-          )}
-        </TransformWrapper>
+          {Array.from(new Array(numPages), (el, index) => (
+            // The canvas scales natively within this div, expanding the scrollbar naturally
+            <div key={`page_${index + 1}`} className="mb-6 shadow-2xl rounded-sm bg-white shrink-0">
+              <Page
+                pageNumber={index + 1}
+                width={basePdfWidth}
+                scale={zoom} // 🚨 React-PDF Native HD Scaling!
+                renderTextLayer={false} // Blocks text copying
+                renderAnnotationLayer={false} // Blocks hyperlink clicking
+                loading={<div className="h-96 flex items-center justify-center bg-gray-50"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>}
+              />
+            </div>
+          ))}
+        </Document>
       </div>
     </div>
   );
