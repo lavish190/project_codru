@@ -50,13 +50,13 @@ const PlanViewer = () => {
     );
   }
 
-  // 🚨 The secure URL from your backend! No hardcoded PDF links needed.
+  // 🚨 The secure URL from your backend for viewing
   const securePdfUrl = `https://api.curiousteamlearning.com/api/view-pdf/${id}`;
 
   return (
     <div className="min-h-screen bg-[#f7f4f1] flex flex-col">
       {/* Top Navigation Bar */}
-      <div className="bg-white shadow-sm border-b border-gray-100 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 z-10 relative">
+      <div className="bg-white shadow-sm border-b border-gray-100 px-6 py-4 flex items-center justify-between z-10 relative">
         <div className="flex items-center gap-3">
           <div className="bg-[#1765a4]/10 p-2 rounded-xl">
             <FileText className="w-6 h-6 text-[#1765a4]" />
@@ -68,19 +68,9 @@ const PlanViewer = () => {
             <p className="text-sm text-gray-500 font-medium">Prepared exclusively for {leadData?.name}</p>
           </div>
         </div>
-        
-        {/* Download Button now points securely to the backend stream */}
-        <a 
-          href={securePdfUrl} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="bg-[#ed7f23] text-white px-6 py-2.5 rounded-full font-bold shadow-md hover:-translate-y-0.5 transition-transform text-sm whitespace-nowrap"
-        >
-          Open / Download PDF
-        </a>
       </div>
 
-      {/* The PDF Viewer iframe - securely streams from backend */}
+      {/* The PDF Viewer iframe - securely streams from backend without toolbars */}
       <div className="flex-grow w-full h-[calc(100vh-80px)] bg-gray-100">
         <iframe 
           src={`${securePdfUrl}#toolbar=0`} 
