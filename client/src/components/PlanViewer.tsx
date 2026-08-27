@@ -4,8 +4,8 @@ import { Loader2, AlertCircle, FileText, ZoomIn, ZoomOut, Maximize } from "lucid
 import { Document, Page, pdfjs } from "react-pdf";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
-// Set up the PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+// ✅ FIX 1: Switched from unpkg to Cloudflare (cdnjs) to permanently fix the CORS error
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 const PlanViewer = () => {
   const { id } = useParams();
@@ -15,7 +15,7 @@ const PlanViewer = () => {
   const [numPages, setNumPages] = useState(null);
   const [containerWidth, setContainerWidth] = useState(window.innerWidth);
   
-  // States for hiding/showing the navigation bar
+  // States for hiding/showing the title bar
   const [showNav, setShowNav] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
 
@@ -42,10 +42,10 @@ const PlanViewer = () => {
     fetchBrochureData();
   }, [id]);
 
-  // Handle hiding/showing top nav on scroll
+  // Handle hiding/showing the title bar on scroll
   const handleScroll = (e) => {
     const currentScrollY = e.target.scrollTop;
-    // Hide nav if scrolling down past 60px, show if scrolling up
+    // Hide title bar if scrolling down past 60px, show if scrolling up
     if (currentScrollY > lastScrollY && currentScrollY > 60) {
       setShowNav(false);
     } else if (currentScrollY < lastScrollY) {
@@ -65,7 +65,7 @@ const PlanViewer = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#f7f4f1]">
+      <div className="min-h-[70vh] flex flex-col items-center justify-center bg-[#f7f4f1]">
         <Loader2 className="w-12 h-12 text-[#ed7f23] animate-spin mb-4" />
         <h2 className="text-[#1765a4] text-xl font-bold font-display">Unlocking your brochure...</h2>
       </div>
@@ -74,11 +74,11 @@ const PlanViewer = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#f7f4f1] p-6 text-center">
+      <div className="min-h-[70vh] flex flex-col items-center justify-center bg-[#f7f4f1] p-6 text-center">
         <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Oops! Link Invalid</h2>
         <p className="text-gray-600 mb-6">{error}</p>
-        <a href="https://curiousteamlearning.com" className="bg-[#1765a4] text-white px-6 py-3 rounded-full font-bold shadow-lg hover:-translate-y-1 transition-transform">
+        <a href="/" className="bg-[#1765a4] text-white px-6 py-3 rounded-full font-bold shadow-lg hover:-translate-y-1 transition-transform">
           Return to Homepage
         </a>
       </div>
@@ -89,11 +89,17 @@ const PlanViewer = () => {
   const pdfWidth = Math.min(containerWidth * 0.95, 800);
 
   return (
-    <div className="h-screen bg-[#e2e8f0] flex flex-col overflow-hidden relative" onContextMenu={handleContextMenu}>
+    // ✅ FIX 2: Changed from h-screen to relative flex-grow. This allows your main website Navbar to sit safely above it.
+    <div 
+      className="relative flex flex-col flex-grow w-full bg-[#e2e8f0] overflow-hidden" 
+      style={{ height: 'calc(100vh - 64px)' }} // Adjust the 64px if your main navbar is taller/shorter
+      onContextMenu={handleContextMenu}
+    >
       
-      {/* 🌟 AUTO-HIDING TOP NAVIGATION BAR */}
+      {/* 🌟 AUTO-HIDING TITLE BAR */}
+      {/* ✅ FIX 3: Changed from 'fixed' to 'absolute'. It will now hide underneath your main Navbar instead of overlapping it */}
       <div 
-        className={`fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 px-6 py-4 flex items-center justify-between z-50 transition-transform duration-300 ease-in-out ${showNav ? 'translate-y-0' : '-translate-y-full'}`}
+        className={`absolute top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 px-6 py-4 flex items-center justify-between z-40 transition-transform duration-300 ease-in-out ${showNav ? 'translate-y-0' : '-translate-y-full'}`}
       >
         <div className="flex items-center gap-3">
           <div className="bg-[#1765a4]/10 p-2 rounded-xl">
@@ -113,8 +119,7 @@ const PlanViewer = () => {
         </div>
       </div>
 
-      {/* 🌟 NATIVE SCROLL CONTAINER */}
-      {/* touch-pan-y allows vertical swiping to scroll, overscroll-none stops mobile 'pull-to-refresh' bounce */}
+      {/* 🌟 NATIVE SCROLL & ZOOM CONTAINER */}
       <div 
         className="flex-grow w-full h-full overflow-y-auto touch-pan-y overscroll-none pt-24 pb-10 flex flex-col items-center" 
         onScroll={handleScroll}
@@ -123,7 +128,7 @@ const PlanViewer = () => {
           initialScale={1}
           minScale={0.5}
           maxScale={4}
-          // Allows normal scrolling; only zooms when Ctrl is held (Windows) or trackpad pinch is used (Mac)
+          // Only zoom if Ctrl/Cmd is held (Desktop), prevents accidental zoom while scrolling pages
           wheel={{ activationKeys: ["Control", "Meta"] }} 
           pinch={{ step: 5 }} // Native touchscreen pinch zoom for Android/iOS
         >
@@ -156,8 +161,8 @@ const PlanViewer = () => {
                       <Page
                         pageNumber={index + 1}
                         width={pdfWidth}
-                        renderTextLayer={false} 
-                        renderAnnotationLayer={false} 
+                        renderTextLayer={false} // Disables text selection
+                        renderAnnotationLayer={false} // Disables hyperlink interactions
                         loading={<div className="h-96 flex items-center justify-center bg-gray-50"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>}
                       />
                     </div>
