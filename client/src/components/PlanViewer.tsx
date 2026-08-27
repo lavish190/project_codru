@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { Loader2, AlertCircle, FileText, ZoomIn, ZoomOut, Maximize } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
 
-// ✅ OPTION 2 (The Bulletproof Vite Fix) - Loads locally, no CORS errors ever!
+// Load worker locally via Vite
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
@@ -50,19 +50,18 @@ const PlanViewer = () => {
 
   // 🌟 THE MAGIC: Intercept OS-level zooming to only zoom the PDF
   useEffect(() => {
-    // 1. Desktop: Block Ctrl + Scroll Wheel (or Mac Trackpad Pinch)
+    // 1. Desktop: Block Ctrl + Scroll Wheel
     const handleWheel = (e) => {
       if (e.ctrlKey || e.metaKey) {
-        e.preventDefault(); // 🚨 Stops the whole browser window from zooming
+        e.preventDefault(); // Stops the whole browser window from zooming
         setZoom(prev => {
-          // Adjust zoom speed
           const newZoom = e.deltaY > 0 ? prev - 0.1 : prev + 0.1;
-          return Math.min(Math.max(0.5, newZoom), 4); // Limits zoom between 50% and 400%
+          return Math.min(Math.max(0.5, newZoom), 4); 
         });
       }
     };
 
-    // 2. Mobile: Block native 2-finger browser zooming
+    // 2. Mobile: Smooth Pinch Zoom Math
     let initialDist = 0;
     const handleTouchStart = (e) => {
       if (e.touches.length === 2) {
@@ -75,16 +74,16 @@ const PlanViewer = () => {
 
     const handleTouchMove = (e) => {
       if (e.touches.length === 2) {
-        e.preventDefault(); // 🚨 Stops mobile browser from zooming
         const currentDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
         if (initialDist > 0) {
           const delta = currentDist - initialDist;
-          if (Math.abs(delta) > 10) { // Sensitivity threshold
+          if (Math.abs(delta) > 5) { 
             setZoom(prev => {
-              const newZoom = delta > 0 ? prev + 0.05 : prev - 0.05;
+              // Smooth mobile scaling multiplier
+              const newZoom = prev + (delta * 0.005); 
               return Math.min(Math.max(0.5, newZoom), 4);
             });
             initialDist = currentDist;
@@ -97,9 +96,9 @@ const PlanViewer = () => {
       if (e.touches.length < 2) initialDist = 0;
     };
 
-    // Attach listeners
     document.addEventListener('wheel', handleWheel, { passive: false });
-    const container = document.getElementById('pdf-viewer-wrapper');
+    const container = document.getElementById('pdf-scroll-container');
+    
     if (container) {
       container.addEventListener('touchstart', handleTouchStart, { passive: false });
       container.addEventListener('touchmove', handleTouchMove, { passive: false });
@@ -119,7 +118,6 @@ const PlanViewer = () => {
   // Handle hiding/showing the title bar on scroll
   const handleScroll = (e) => {
     const currentScrollY = e.target.scrollTop;
-    // Hide title bar if scrolling down past 60px, show if scrolling up
     if (currentScrollY > lastScrollY && currentScrollY > 60) {
       setShowNav(false);
     } else if (currentScrollY < lastScrollY) {
@@ -132,10 +130,7 @@ const PlanViewer = () => {
     setNumPages(numPages);
   }
 
-  // Prevent right-click context menu on the PDF wrapper
-  const handleContextMenu = (e) => {
-    e.preventDefault();
-  };
+  const handleContextMenu = (e) => e.preventDefault();
 
   if (loading) {
     return (
@@ -163,9 +158,7 @@ const PlanViewer = () => {
   const basePdfWidth = Math.min(containerWidth * 0.95, 800);
 
   return (
-    // Height calculation ensures it sits perfectly under your main website navbar
     <div 
-      id="pdf-viewer-wrapper"
       className="relative flex flex-col flex-grow w-full bg-[#e2e8f0] overflow-hidden" 
       style={{ height: 'calc(100vh - 64px)' }} 
       onContextMenu={handleContextMenu}
@@ -193,8 +186,9 @@ const PlanViewer = () => {
         </div>
       </div>
 
-      {/* Floating Zoom Controls */}
-      <div className={`absolute bottom-6 right-6 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
+      {/* 🌟 FLOATING ZOOM CONTROLS */}
+      {/* ✅ FIX 1: Pushed up to bottom-24 on mobile so it doesn't overlap phone browsers, bottom-8 on desktop */}
+      <div className={`absolute bottom-24 right-4 md:bottom-8 md:right-8 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
         <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
           <ZoomIn className="w-5 h-5" />
         </button>
@@ -207,31 +201,36 @@ const PlanViewer = () => {
       </div>
 
       {/* 🌟 NATIVE SCROLL CONTAINER */}
+      {/* ✅ FIX 2: touch-action: 'pan-x pan-y' tells the mobile browser to STOP native window pinching */}
       <div 
-        className="flex-grow w-full h-full overflow-auto pt-24 pb-10 flex flex-col items-center" 
+        id="pdf-scroll-container"
+        className="flex-grow w-full h-full overflow-auto pt-24 pb-32" 
+        style={{ touchAction: 'pan-x pan-y' }}
         onScroll={handleScroll}
       >
-        <Document
-          file={securePdfUrl}
-          onLoadSuccess={onDocumentLoadSuccess}
-          loading={<Loader2 className="w-10 h-10 text-[#1765a4] animate-spin mt-10" />}
-          error={<p className="text-red-500 mt-10 font-bold">Failed to load the secure document.</p>}
-          className="flex flex-col items-center w-full pb-20"
-        >
-          {Array.from(new Array(numPages), (el, index) => (
-            // The canvas scales natively within this div, expanding the scrollbar naturally
-            <div key={`page_${index + 1}`} className="mb-6 shadow-2xl rounded-sm bg-white shrink-0">
-              <Page
-                pageNumber={index + 1}
-                width={basePdfWidth}
-                scale={zoom} // 🚨 React-PDF Native HD Scaling!
-                renderTextLayer={false} // Blocks text copying
-                renderAnnotationLayer={false} // Blocks hyperlink clicking
-                loading={<div className="h-96 flex items-center justify-center bg-gray-50"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>}
-              />
-            </div>
-          ))}
-        </Document>
+        {/* ✅ FIX 3: Using 'w-fit mx-auto' prevents Flexbox from clipping the left side when zoomed in! */}
+        <div className="min-w-max w-full">
+          <Document
+            file={securePdfUrl}
+            onLoadSuccess={onDocumentLoadSuccess}
+            loading={<Loader2 className="w-10 h-10 text-[#1765a4] animate-spin mx-auto mt-10" />}
+            error={<p className="text-red-500 mt-10 font-bold text-center">Failed to load the secure document.</p>}
+            className="w-fit mx-auto flex flex-col gap-6 px-4"
+          >
+            {Array.from(new Array(numPages), (el, index) => (
+              <div key={`page_${index + 1}`} className="shadow-2xl rounded-sm bg-white shrink-0">
+                <Page
+                  pageNumber={index + 1}
+                  width={basePdfWidth}
+                  scale={zoom} // High-res native zoom rendering
+                  renderTextLayer={false} 
+                  renderAnnotationLayer={false} 
+                  loading={<div className="h-96 flex items-center justify-center bg-gray-50"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>}
+                />
+              </div>
+            ))}
+          </Document>
+        </div>
       </div>
     </div>
   );
