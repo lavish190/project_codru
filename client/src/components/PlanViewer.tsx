@@ -47,42 +47,22 @@ const PlanViewer = () => {
     fetchBrochureData();
   }, [id]);
 
-  // 🌟 1. VIEWPORT LOCK (Blocks whole-window zooming)
+  // 🌟 DYNAMIC VIEWPORT LOCK & NATIVE ZOOM INTERCEPTOR
   useEffect(() => {
     const viewportMeta = document.querySelector('meta[name="viewport"]');
     const originalViewport = viewportMeta ? viewportMeta.getAttribute('content') : '';
+    
     if (viewportMeta) {
       viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
     }
-    return () => {
-      if (viewportMeta && originalViewport) viewportMeta.setAttribute('content', originalViewport);
-    };
-  }, []);
-
-  // 🌟 2. DESKTOP ZOOM (Ctrl + Wheel)
-  useEffect(() => {
-    const container = document.getElementById('pdf-scroll-container');
-    if (!container) return;
 
     const handleWheel = (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault(); 
-        setZoom(prev => {
-          const newZoom = e.deltaY > 0 ? prev - 0.1 : prev + 0.1;
-          return Math.min(Math.max(0.5, newZoom), 4); 
-        });
+        setZoom(prev => Math.min(Math.max(0.5, prev + (e.deltaY > 0 ? -0.1 : 0.1)), 4));
       }
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, []);
-
-  // 🌟 3. MOBILE PINCH ZOOM (Strictly handles 2 fingers only, leaves 1 finger to native scroll)
-  useEffect(() => {
-    const wrapper = pdfWrapperRef.current;
-    if (!wrapper) return;
-    
     let initialDist = 0;
     let pinchScale = 1;
 
@@ -97,22 +77,19 @@ const PlanViewer = () => {
     };
 
     const handleTouchMove = (e) => {
-      console.log("Touch move fired! Fingers on screen:", e.touches.length);
-      if (e.touches.length === 2) {
-        if (e.cancelable) e.preventDefault(); // 🚨 ONLY block default if there are exactly 2 fingers!
-        
+      if (e.touches.length === 2 && initialDist > 0) {
+        e.preventDefault(); // Blocks the browser from trying to zoom
         const currentDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
 
-        if (initialDist === 0) initialDist = currentDist; // Catch mid-swipe double touches
+        pinchScale = currentDist / initialDist;
 
-        if (initialDist > 0) {
-          pinchScale = currentDist / initialDist;
-          wrapper.style.transform = `scale(${pinchScale})`;
-          wrapper.style.transformOrigin = "top center";
-          wrapper.style.transition = "none";
+        if (pdfWrapperRef.current) {
+          pdfWrapperRef.current.style.transform = `scale(${pinchScale})`;
+          pdfWrapperRef.current.style.transition = "none";
+          pdfWrapperRef.current.style.transformOrigin = "top center"; // Keeps it anchored
         }
       }
     };
@@ -122,24 +99,37 @@ const PlanViewer = () => {
         if (pinchScale !== 1) {
           setZoom(prev => Math.min(Math.max(0.5, prev * pinchScale), 4));
         }
-        wrapper.style.transform = `scale(1)`;
+        if (pdfWrapperRef.current) {
+          pdfWrapperRef.current.style.transform = `scale(1)`;
+        }
         initialDist = 0;
         pinchScale = 1;
       }
     };
 
-    wrapper.addEventListener('touchstart', handleTouchStart, { passive: false });
-    wrapper.addEventListener('touchmove', handleTouchMove, { passive: false });
-    wrapper.addEventListener('touchend', handleTouchEnd);
+    // 🚨 FIX: Attach listeners to the document/container, NOT just the PDF pages!
+    document.addEventListener('wheel', handleWheel, { passive: false });
+    const scrollContainer = document.getElementById('pdf-scroll-container');
+    
+    if (scrollContainer) {
+      scrollContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
+      scrollContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
+      scrollContainer.addEventListener('touchend', handleTouchEnd);
+    }
 
     return () => {
-      wrapper.removeEventListener('touchstart', handleTouchStart);
-      wrapper.removeEventListener('touchmove', handleTouchMove);
-      wrapper.removeEventListener('touchend', handleTouchEnd);
+      if (viewportMeta && originalViewport) {
+        viewportMeta.setAttribute('content', originalViewport);
+      }
+      document.removeEventListener('wheel', handleWheel);
+      if (scrollContainer) {
+        scrollContainer.removeEventListener('touchstart', handleTouchStart);
+        scrollContainer.removeEventListener('touchmove', handleTouchMove);
+        scrollContainer.removeEventListener('touchend', handleTouchEnd);
+      }
     };
   }, []);
 
-  // Navbar Auto-Hide Logic
   const handleScroll = (e) => {
     const currentScrollY = e.target.scrollTop;
     if (currentScrollY > lastScrollY && currentScrollY > 60) {
@@ -182,9 +172,9 @@ const PlanViewer = () => {
   const basePdfWidth = Math.min(containerWidth * 0.95, 800);
 
   return (
-    // 🚨 FIX 1: "fixed inset-0" ensures the window itself NEVER scrolls on mobile, only the inner container.
     <div 
-      className="fixed inset-0 bg-[#e2e8f0] overflow-hidden" 
+      className="relative flex flex-col flex-grow w-full bg-[#e2e8f0] overflow-hidden" 
+      style={{ height: 'calc(100vh - 64px)' }} 
       onContextMenu={handleContextMenu}
     >
       
@@ -210,7 +200,7 @@ const PlanViewer = () => {
         </div>
       </div>
 
-      {/* 🌟 FLOATING ZOOM CONTROLS */}
+      {/* 🌟 FLOATING ZOOM CONTROLS (Position Preserved) */}
       <div className={`fixed bottom-[12dvh] right-4 md:bottom-8 md:right-8 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
         <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
           <ZoomIn className="w-5 h-5" />
@@ -226,15 +216,15 @@ const PlanViewer = () => {
       {/* 🌟 NATIVE SCROLL CONTAINER */}
       <div 
         id="pdf-scroll-container"
-        className="absolute inset-0 overflow-auto pt-24 pb-32" 
-        style={{ border: '5px solid red' }} // 🚨 FIX 2: Restores native momentum swipe on iPhones
+        className="flex-grow w-full h-full overflow-auto pt-24 pb-32" 
+        style={{ touchAction: 'pan-x pan-y' }} 
         onScroll={handleScroll}
       >
-        {/* w-fit min-w-full prevents left-side clipping when zoomed */}
-        <div className="w-fit min-w-full mx-auto" style={{ border: '5px solid blue' }}>
+        <div className="w-fit min-w-full mx-auto">
           {/* Target for our CSS Pinch Zoom layer */}
-          <div ref={pdfWrapperRef} className="flex flex-col items-center px-4 origin-top">
+          <div ref={pdfWrapperRef} className="flex flex-col items-center px-4 origin-center">
             
+            {/* 🚨 FIX: Restored className to Document to enforce vertical stacking & gaps */}
             <Document
               file={securePdfUrl}
               onLoadSuccess={onDocumentLoadSuccess}
@@ -244,6 +234,7 @@ const PlanViewer = () => {
             >
               {Array.from(new Array(numPages), (el, index) => (
                 <div key={`page_${index + 1}`} className="mb-8 shadow-2xl rounded-sm bg-white overflow-hidden shrink-0 border border-gray-200">
+                  {/* Pages are now visually separated with mb-8 and a border */}
                   <Page
                     pageNumber={index + 1}
                     width={basePdfWidth}
@@ -252,10 +243,9 @@ const PlanViewer = () => {
                     renderAnnotationLayer={false} 
                     loading={<div className="h-96 flex items-center justify-center bg-gray-50"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>}
                   />
-                </div>
+                </div>               
               ))}
             </Document>
-            
           </div>
         </div>
       </div>
