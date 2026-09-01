@@ -47,10 +47,8 @@ const PlanViewer = () => {
     fetchBrochureData();
   }, [id]);
 
-  // 🌟 THE MAGIC: Viewport Lock & Native Zoom Interceptor
+  // 🌟 DYNAMIC VIEWPORT LOCK & NATIVE ZOOM INTERCEPTOR
   useEffect(() => {
-    // 1. DYNAMIC VIEWPORT LOCK (The Samsung Internet Killer)
-    // This tells the mobile OS "Do not zoom the window, let the code handle it!"
     const viewportMeta = document.querySelector('meta[name="viewport"]');
     const originalViewport = viewportMeta ? viewportMeta.getAttribute('content') : '';
     
@@ -58,7 +56,7 @@ const PlanViewer = () => {
       viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
     }
 
-    // 2. Desktop: Block Ctrl + Scroll Wheel
+    // Desktop: Block Ctrl + Scroll Wheel
     const handleWheel = (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault(); 
@@ -69,7 +67,7 @@ const PlanViewer = () => {
       }
     };
 
-    // 3. Mobile: Buttery Smooth Pinch Zoom via CSS
+    // Mobile: Buttery Smooth Pinch Zoom via CSS
     let initialDist = 0;
     let pinchScale = 1;
 
@@ -85,7 +83,7 @@ const PlanViewer = () => {
 
     const handleTouchMove = (e) => {
       if (e.touches.length === 2 && initialDist > 0) {
-        e.preventDefault(); // Safe to do now because viewport is locked
+        e.preventDefault(); 
         const currentDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
@@ -93,7 +91,6 @@ const PlanViewer = () => {
 
         pinchScale = currentDist / initialDist;
 
-        // Apply instant CSS transform during the pinch for zero lag
         if (pdfWrapperRef.current) {
           pdfWrapperRef.current.style.transform = `scale(${pinchScale})`;
           pdfWrapperRef.current.style.transition = "none";
@@ -103,11 +100,9 @@ const PlanViewer = () => {
 
     const handleTouchEnd = (e) => {
       if (e.touches.length < 2 && initialDist > 0) {
-        // Once fingers lift, apply the permanent HD React zoom
         if (pinchScale !== 1) {
           setZoom(prev => Math.min(Math.max(0.5, prev * pinchScale), 4));
         }
-        // Reset the CSS layer
         if (pdfWrapperRef.current) {
           pdfWrapperRef.current.style.transform = `scale(1)`;
         }
@@ -118,7 +113,6 @@ const PlanViewer = () => {
 
     document.addEventListener('wheel', handleWheel, { passive: false });
     
-    // Attach touch listeners directly to our wrapper for maximum reliability
     const wrapper = pdfWrapperRef.current;
     if (wrapper) {
       wrapper.addEventListener('touchstart', handleTouchStart, { passive: false });
@@ -127,7 +121,6 @@ const PlanViewer = () => {
     }
 
     return () => {
-      // Restore the user's normal browser zoom settings when they leave this page!
       if (viewportMeta && originalViewport) {
         viewportMeta.setAttribute('content', originalViewport);
       }
@@ -210,7 +203,7 @@ const PlanViewer = () => {
         </div>
       </div>
 
-      {/* 🌟 FLOATING ZOOM CONTROLS */}
+      {/* 🌟 FLOATING ZOOM CONTROLS (Position Preserved) */}
       <div className={`fixed bottom-[12dvh] right-4 md:bottom-8 md:right-8 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
         <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
           <ZoomIn className="w-5 h-5" />
@@ -231,15 +224,19 @@ const PlanViewer = () => {
       >
         <div className="w-fit min-w-full mx-auto">
           {/* Target for our CSS Pinch Zoom layer */}
-          <div ref={pdfWrapperRef} className="flex flex-col items-center gap-6 px-4 origin-center">
+          <div ref={pdfWrapperRef} className="flex flex-col items-center px-4 origin-center">
+            
+            {/* 🚨 FIX: Restored className to Document to enforce vertical stacking & gaps */}
             <Document
               file={securePdfUrl}
               onLoadSuccess={onDocumentLoadSuccess}
               loading={<Loader2 className="w-10 h-10 text-[#1765a4] animate-spin mx-auto mt-10" />}
               error={<p className="text-red-500 mt-10 font-bold text-center">Failed to load the secure document.</p>}
+              className="flex flex-col gap-8 pb-10" 
             >
               {Array.from(new Array(numPages), (el, index) => (
-                <div key={`page_${index + 1}`} className="shadow-2xl rounded-sm bg-white shrink-0">
+                <div key={`page_${index + 1}`} className="mb-8 shadow-2xl rounded-sm bg-white overflow-hidden shrink-0 border border-gray-200">
+                  {/* Pages are now visually separated with mb-8 and a border */}
                   <Page
                     pageNumber={index + 1}
                     width={basePdfWidth}
@@ -248,7 +245,7 @@ const PlanViewer = () => {
                     renderAnnotationLayer={false} 
                     loading={<div className="h-96 flex items-center justify-center bg-gray-50"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>}
                   />
-                </div>
+                </div>               
               ))}
             </Document>
           </div>
