@@ -47,15 +47,9 @@ const PlanViewer = () => {
     fetchBrochureData();
   }, [id]);
 
-  // 🌟 DYNAMIC VIEWPORT LOCK & NATIVE ZOOM INTERCEPTOR
+  // 🌟 DESKTOP NATIVE ZOOM ONLY
+  // Mobile touch listeners are completely removed to allow standard browser pinch-to-zoom
   useEffect(() => {
-    const viewportMeta = document.querySelector('meta[name="viewport"]');
-    const originalViewport = viewportMeta ? viewportMeta.getAttribute('content') : '';
-    
-    if (viewportMeta) {
-      viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
-    }
-
     const handleWheel = (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault(); 
@@ -63,70 +57,11 @@ const PlanViewer = () => {
       }
     };
 
-    let initialDist = 0;
-    let pinchScale = 1;
-
-    const handleTouchStart = (e) => {
-      if (e.touches.length === 2) {
-        initialDist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-        pinchScale = 1;
-      }
-    };
-
-    const handleTouchMove = (e) => {
-      if (e.touches.length === 2 && initialDist > 0) {
-        e.preventDefault(); // Blocks the browser from trying to zoom
-        const currentDist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-
-        pinchScale = currentDist / initialDist;
-
-        if (pdfWrapperRef.current) {
-          pdfWrapperRef.current.style.transform = `scale(${pinchScale})`;
-          pdfWrapperRef.current.style.transition = "none";
-          pdfWrapperRef.current.style.transformOrigin = "top center"; // Keeps it anchored
-        }
-      }
-    };
-
-    const handleTouchEnd = (e) => {
-      if (e.touches.length < 2 && initialDist > 0) {
-        if (pinchScale !== 1) {
-          setZoom(prev => Math.min(Math.max(0.5, prev * pinchScale), 4));
-        }
-        if (pdfWrapperRef.current) {
-          pdfWrapperRef.current.style.transform = `scale(1)`;
-        }
-        initialDist = 0;
-        pinchScale = 1;
-      }
-    };
-
-    // 🚨 FIX: Attach listeners to the document/container, NOT just the PDF pages!
+    // Attach wheel listener to the document for desktop
     document.addEventListener('wheel', handleWheel, { passive: false });
-    const scrollContainer = document.getElementById('pdf-scroll-container');
-    
-    if (scrollContainer) {
-      scrollContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
-      scrollContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
-      scrollContainer.addEventListener('touchend', handleTouchEnd);
-    }
 
     return () => {
-      if (viewportMeta && originalViewport) {
-        viewportMeta.setAttribute('content', originalViewport);
-      }
       document.removeEventListener('wheel', handleWheel);
-      if (scrollContainer) {
-        scrollContainer.removeEventListener('touchstart', handleTouchStart);
-        scrollContainer.removeEventListener('touchmove', handleTouchMove);
-        scrollContainer.removeEventListener('touchend', handleTouchEnd);
-      }
     };
   }, []);
 
@@ -200,7 +135,7 @@ const PlanViewer = () => {
         </div>
       </div>
 
-      {/* 🌟 FLOATING ZOOM CONTROLS (Position Preserved) */}
+      {/* 🌟 FLOATING ZOOM CONTROLS */}
       <div className={`fixed bottom-[12dvh] right-4 md:bottom-8 md:right-8 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
         <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
           <ZoomIn className="w-5 h-5" />
@@ -217,14 +152,12 @@ const PlanViewer = () => {
       <div 
         id="pdf-scroll-container"
         className="flex-grow w-full h-full overflow-auto pt-24 pb-32" 
-        style={{ touchAction: 'pan-x pan-y' }} 
         onScroll={handleScroll}
       >
         <div className="w-fit min-w-full mx-auto">
           {/* Target for our CSS Pinch Zoom layer */}
           <div ref={pdfWrapperRef} className="flex flex-col items-center px-4 origin-center">
             
-            {/* 🚨 FIX: Restored className to Document to enforce vertical stacking & gaps */}
             <Document
               file={securePdfUrl}
               onLoadSuccess={onDocumentLoadSuccess}
