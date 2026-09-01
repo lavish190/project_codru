@@ -97,6 +97,7 @@ const PlanViewer = () => {
     };
 
     const handleTouchMove = (e) => {
+      console.log("Touch move fired! Fingers on screen:", e.touches.length);
       if (e.touches.length === 2) {
         if (e.cancelable) e.preventDefault(); // 🚨 ONLY block default if there are exactly 2 fingers!
         
@@ -226,11 +227,11 @@ const PlanViewer = () => {
       <div 
         id="pdf-scroll-container"
         className="absolute inset-0 overflow-auto pt-24 pb-32" 
-        style={{ WebkitOverflowScrolling: 'touch' }} // 🚨 FIX 2: Restores native momentum swipe on iPhones
+        style={{ border: '5px solid red' }} // 🚨 FIX 2: Restores native momentum swipe on iPhones
         onScroll={handleScroll}
       >
         {/* w-fit min-w-full prevents left-side clipping when zoomed */}
-        <div className="w-fit min-w-full mx-auto">
+        <div className="w-fit min-w-full mx-auto" style={{ border: '5px solid blue' }}>
           {/* Target for our CSS Pinch Zoom layer */}
           <div ref={pdfWrapperRef} className="flex flex-col items-center px-4 origin-top">
             
