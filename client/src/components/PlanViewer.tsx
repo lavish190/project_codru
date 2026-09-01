@@ -56,18 +56,13 @@ const PlanViewer = () => {
       viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
     }
 
-    // Desktop: Block Ctrl + Scroll Wheel
     const handleWheel = (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault(); 
-        setZoom(prev => {
-          const newZoom = e.deltaY > 0 ? prev - 0.1 : prev + 0.1;
-          return Math.min(Math.max(0.5, newZoom), 4); 
-        });
+        setZoom(prev => Math.min(Math.max(0.5, prev + (e.deltaY > 0 ? -0.1 : 0.1)), 4));
       }
     };
 
-    // Mobile: Buttery Smooth Pinch Zoom via CSS
     let initialDist = 0;
     let pinchScale = 1;
 
@@ -83,7 +78,7 @@ const PlanViewer = () => {
 
     const handleTouchMove = (e) => {
       if (e.touches.length === 2 && initialDist > 0) {
-        e.preventDefault(); 
+        e.preventDefault(); // Blocks the browser from trying to zoom
         const currentDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
@@ -94,6 +89,7 @@ const PlanViewer = () => {
         if (pdfWrapperRef.current) {
           pdfWrapperRef.current.style.transform = `scale(${pinchScale})`;
           pdfWrapperRef.current.style.transition = "none";
+          pdfWrapperRef.current.style.transformOrigin = "top center"; // Keeps it anchored
         }
       }
     };
@@ -111,13 +107,14 @@ const PlanViewer = () => {
       }
     };
 
+    // 🚨 FIX: Attach listeners to the document/container, NOT just the PDF pages!
     document.addEventListener('wheel', handleWheel, { passive: false });
+    const scrollContainer = document.getElementById('pdf-scroll-container');
     
-    const wrapper = pdfWrapperRef.current;
-    if (wrapper) {
-      wrapper.addEventListener('touchstart', handleTouchStart, { passive: false });
-      wrapper.addEventListener('touchmove', handleTouchMove, { passive: false });
-      wrapper.addEventListener('touchend', handleTouchEnd);
+    if (scrollContainer) {
+      scrollContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
+      scrollContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
+      scrollContainer.addEventListener('touchend', handleTouchEnd);
     }
 
     return () => {
@@ -125,10 +122,10 @@ const PlanViewer = () => {
         viewportMeta.setAttribute('content', originalViewport);
       }
       document.removeEventListener('wheel', handleWheel);
-      if (wrapper) {
-        wrapper.removeEventListener('touchstart', handleTouchStart);
-        wrapper.removeEventListener('touchmove', handleTouchMove);
-        wrapper.removeEventListener('touchend', handleTouchEnd);
+      if (scrollContainer) {
+        scrollContainer.removeEventListener('touchstart', handleTouchStart);
+        scrollContainer.removeEventListener('touchmove', handleTouchMove);
+        scrollContainer.removeEventListener('touchend', handleTouchEnd);
       }
     };
   }, []);
@@ -220,6 +217,7 @@ const PlanViewer = () => {
       <div 
         id="pdf-scroll-container"
         className="flex-grow w-full h-full overflow-auto pt-24 pb-32" 
+        style={{ touchAction: 'pan-x pan-y' }} 
         onScroll={handleScroll}
       >
         <div className="w-fit min-w-full mx-auto">
