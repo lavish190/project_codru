@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { Loader2, AlertCircle, FileText, ZoomIn, ZoomOut, Maximize } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
 // Load worker locally via Vite
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -15,13 +16,7 @@ const PlanViewer = () => {
   const [error, setError] = useState(null);
   const [leadData, setLeadData] = useState(null);
   const [numPages, setNumPages] = useState(null);
-  
   const [containerWidth, setContainerWidth] = useState(window.innerWidth);
-  const [zoom, setZoom] = useState(1);
-  const pdfWrapperRef = useRef(null); 
-  
-  const [showNav, setShowNav] = useState(true);
-  const [lastScrollY, setLastScrollY] = useState(0);
 
   // Keep the PDF responsive on window resize
   useEffect(() => {
@@ -46,99 +41,6 @@ const PlanViewer = () => {
     };
     fetchBrochureData();
   }, [id]);
-
-  // 🌟 DYNAMIC VIEWPORT LOCK & NATIVE ZOOM INTERCEPTOR
-  useEffect(() => {
-    const viewportMeta = document.querySelector('meta[name="viewport"]');
-    const originalViewport = viewportMeta ? viewportMeta.getAttribute('content') : '';
-    
-    if (viewportMeta) {
-      viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
-    }
-
-    const handleWheel = (e) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault(); 
-        setZoom(prev => Math.min(Math.max(0.5, prev + (e.deltaY > 0 ? -0.1 : 0.1)), 4));
-      }
-    };
-
-    let initialDist = 0;
-    let pinchScale = 1;
-
-    const handleTouchStart = (e) => {
-      if (e.touches.length === 2) {
-        initialDist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-        pinchScale = 1;
-      }
-    };
-
-    const handleTouchMove = (e) => {
-      if (e.touches.length === 2 && initialDist > 0) {
-        e.preventDefault(); // Blocks the browser from trying to zoom
-        const currentDist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-
-        pinchScale = currentDist / initialDist;
-
-        if (pdfWrapperRef.current) {
-          pdfWrapperRef.current.style.transform = `scale(${pinchScale})`;
-          pdfWrapperRef.current.style.transition = "none";
-          pdfWrapperRef.current.style.transformOrigin = "top center"; // Keeps it anchored
-        }
-      }
-    };
-
-    const handleTouchEnd = (e) => {
-      if (e.touches.length < 2 && initialDist > 0) {
-        if (pinchScale !== 1) {
-          setZoom(prev => Math.min(Math.max(0.5, prev * pinchScale), 4));
-        }
-        if (pdfWrapperRef.current) {
-          pdfWrapperRef.current.style.transform = `scale(1)`;
-        }
-        initialDist = 0;
-        pinchScale = 1;
-      }
-    };
-
-    // 🚨 FIX: Attach listeners to the document/container, NOT just the PDF pages!
-    document.addEventListener('wheel', handleWheel, { passive: false });
-    const scrollContainer = document.getElementById('pdf-scroll-container');
-    
-    if (scrollContainer) {
-      scrollContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
-      scrollContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
-      scrollContainer.addEventListener('touchend', handleTouchEnd);
-    }
-
-    return () => {
-      if (viewportMeta && originalViewport) {
-        viewportMeta.setAttribute('content', originalViewport);
-      }
-      document.removeEventListener('wheel', handleWheel);
-      if (scrollContainer) {
-        scrollContainer.removeEventListener('touchstart', handleTouchStart);
-        scrollContainer.removeEventListener('touchmove', handleTouchMove);
-        scrollContainer.removeEventListener('touchend', handleTouchEnd);
-      }
-    };
-  }, []);
-
-  const handleScroll = (e) => {
-    const currentScrollY = e.target.scrollTop;
-    if (currentScrollY > lastScrollY && currentScrollY > 60) {
-      setShowNav(false);
-    } else if (currentScrollY < lastScrollY) {
-      setShowNav(true);
-    }
-    setLastScrollY(currentScrollY);
-  };
 
   function onDocumentLoadSuccess({ numPages }) {
     setNumPages(numPages);
@@ -173,15 +75,14 @@ const PlanViewer = () => {
 
   return (
     <div 
-      className="relative flex flex-col flex-grow w-full bg-[#e2e8f0] overflow-hidden" 
+      className="relative flex flex-col w-full bg-[#e2e8f0] overflow-hidden" 
       style={{ height: 'calc(100vh - 64px)' }} 
       onContextMenu={handleContextMenu}
     >
       
-      {/* 🌟 AUTO-HIDING TITLE BAR */}
-      <div 
-        className={`absolute top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 px-6 py-4 flex items-center justify-between z-40 transition-transform duration-300 ease-in-out ${showNav ? 'translate-y-0' : '-translate-y-full'}`}
-      >
+      {/* 🌟 LOCKED TITLE BAR */}
+      {/* Because the library handles scrolling internally now, we lock this at the top so it doesn't glitch */}
+      <div className="absolute top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 px-6 py-4 flex items-center justify-between z-40">
         <div className="flex items-center gap-3">
           <div className="bg-[#1765a4]/10 p-2 rounded-xl">
             <FileText className="w-6 h-6 text-[#1765a4]" />
@@ -200,54 +101,71 @@ const PlanViewer = () => {
         </div>
       </div>
 
-      {/* 🌟 FLOATING ZOOM CONTROLS (Position Preserved) */}
-      <div className={`fixed bottom-[12dvh] right-4 md:bottom-8 md:right-8 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
-        <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
-          <ZoomIn className="w-5 h-5" />
-        </button>
-        <button onClick={() => setZoom(1)} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
-          <Maximize className="w-5 h-5" />
-        </button>
-        <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
-          <ZoomOut className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* 🌟 NATIVE SCROLL CONTAINER */}
+      {/* 🌟 NATIVE PAN & ZOOM CONTAINER */}
+      {/* touchAction: 'none' tells the mobile browser to STOP everything, let the library do its job */}
       <div 
-        id="pdf-scroll-container"
-        className="flex-grow w-full h-full overflow-auto pt-24 pb-32" 
-        style={{ touchAction: 'pan-x pan-y' }} 
-        onScroll={handleScroll}
+        className="absolute top-[80px] bottom-0 left-0 right-0 z-10" 
+        style={{ touchAction: 'none' }} 
       >
-        <div className="w-fit min-w-full mx-auto">
-          {/* Target for our CSS Pinch Zoom layer */}
-          <div ref={pdfWrapperRef} className="flex flex-col items-center px-4 origin-center">
-            
-            {/* 🚨 FIX: Restored className to Document to enforce vertical stacking & gaps */}
-            <Document
-              file={securePdfUrl}
-              onLoadSuccess={onDocumentLoadSuccess}
-              loading={<Loader2 className="w-10 h-10 text-[#1765a4] animate-spin mx-auto mt-10" />}
-              error={<p className="text-red-500 mt-10 font-bold text-center">Failed to load the secure document.</p>}
-              className="flex flex-col gap-8 pb-10" 
-            >
-              {Array.from(new Array(numPages), (el, index) => (
-                <div key={`page_${index + 1}`} className="mb-8 shadow-2xl rounded-sm bg-white overflow-hidden shrink-0 border border-gray-200">
-                  {/* Pages are now visually separated with mb-8 and a border */}
-                  <Page
-                    pageNumber={index + 1}
-                    width={basePdfWidth}
-                    scale={zoom} 
-                    renderTextLayer={false} 
-                    renderAnnotationLayer={false} 
-                    loading={<div className="h-96 flex items-center justify-center bg-gray-50"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>}
-                  />
-                </div>               
-              ))}
-            </Document>
-          </div>
-        </div>
+        <TransformWrapper
+          initialScale={1}
+          minScale={0.5}
+          maxScale={4}
+          centerOnInit={true}
+          centerZoomedOut={true}
+          limitToBounds={false} // 🚨 FIX 1: Turns off the aggressive boundaries, totally fixing the "Left Scroll Stuck" bug!
+          wheel={{ activationKeys: ["Control", "Meta"], step: 0.1 }} // Keeps Ctrl+Scroll for desktop
+          pinch={{ step: 5 }} // Native touchscreen pinch zoom
+          panning={{ velocityDisabled: false }} // Allows natural swipe momentum
+        >
+          {({ zoomIn, zoomOut, resetTransform }) => (
+            <>
+              {/* 🌟 FLOATING ZOOM CONTROLS (Position Preserved!) */}
+              <div className="fixed bottom-[12dvh] right-4 md:bottom-8 md:right-8 flex flex-col gap-3 z-50">
+                <button onClick={() => zoomIn()} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
+                  <ZoomIn className="w-5 h-5" />
+                </button>
+                <button onClick={() => resetTransform()} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
+                  <Maximize className="w-5 h-5" />
+                </button>
+                <button onClick={() => zoomOut()} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
+                  <ZoomOut className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* 🚨 FIX 2: Added flex centering to the contentStyle to align the PDF perfectly */}
+              <TransformComponent 
+                wrapperStyle={{ width: "100%", height: "100%" }}
+                contentStyle={{ width: "100%", display: "flex", justifyContent: "center" }}
+              >
+                <div className="pb-32 pt-8"> 
+                  <Document
+                    file={securePdfUrl}
+                    onLoadSuccess={onDocumentLoadSuccess}
+                    loading={<Loader2 className="w-10 h-10 text-[#1765a4] animate-spin mt-10" />}
+                    error={<p className="text-red-500 mt-10 font-bold">Failed to load the secure document.</p>}
+                    className="flex flex-col gap-8" // 🚨 FIX 3: Restores the 2rem gap between pages!
+                  >
+                    {Array.from(new Array(numPages), (el, index) => (
+                      <div 
+                        key={`page_${index + 1}`} 
+                        className="shadow-2xl rounded-sm bg-white overflow-hidden shrink-0 border border-gray-200" // 🚨 FIX 4: Borders physically separate the pages
+                      >
+                        <Page
+                          pageNumber={index + 1}
+                          width={basePdfWidth}
+                          renderTextLayer={false} 
+                          renderAnnotationLayer={false} 
+                          loading={<div className="h-96 flex items-center justify-center bg-gray-50"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>}
+                        />
+                      </div>
+                    ))}
+                  </Document>
+                </div>
+              </TransformComponent>
+            </>
+          )}
+        </TransformWrapper>
       </div>
 
     </div>
