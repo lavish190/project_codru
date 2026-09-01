@@ -47,16 +47,23 @@ const PlanViewer = () => {
     fetchBrochureData();
   }, [id]);
 
-  // 🌟 DESKTOP NATIVE ZOOM & FIXED MOBILE PINCH
+  // 🌟 1. VIEWPORT LOCK (Blocks whole-window zooming)
   useEffect(() => {
-    // Samsung Internet Viewport Lock
     const viewportMeta = document.querySelector('meta[name="viewport"]');
     const originalViewport = viewportMeta ? viewportMeta.getAttribute('content') : '';
     if (viewportMeta) {
       viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
     }
+    return () => {
+      if (viewportMeta && originalViewport) viewportMeta.setAttribute('content', originalViewport);
+    };
+  }, []);
 
-    // 1. DESKTOP: Native Ctrl + Scroll Wheel (Works Perfectly)
+  // 🌟 2. DESKTOP ZOOM (Ctrl + Wheel)
+  useEffect(() => {
+    const container = document.getElementById('pdf-scroll-container');
+    if (!container) return;
+
     const handleWheel = (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault(); 
@@ -67,7 +74,15 @@ const PlanViewer = () => {
       }
     };
 
-    // 2. MOBILE: Robust Pinch Math
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // 🌟 3. MOBILE PINCH ZOOM (Strictly handles 2 fingers only, leaves 1 finger to native scroll)
+  useEffect(() => {
+    const wrapper = pdfWrapperRef.current;
+    if (!wrapper) return;
+    
     let initialDist = 0;
     let pinchScale = 1;
 
@@ -82,27 +97,21 @@ const PlanViewer = () => {
     };
 
     const handleTouchMove = (e) => {
-      // 🚨 NEW FIX: If a second finger touches down during a swipe, catch it immediately!
       if (e.touches.length === 2) {
-        if (e.cancelable) e.preventDefault(); // Hard-block the browser from taking over
+        if (e.cancelable) e.preventDefault(); // 🚨 ONLY block default if there are exactly 2 fingers!
         
         const currentDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
 
-        // If they didn't touch at the exact same millisecond, set the initial distance now
-        if (initialDist === 0) {
-          initialDist = currentDist;
-        }
+        if (initialDist === 0) initialDist = currentDist; // Catch mid-swipe double touches
 
         if (initialDist > 0) {
           pinchScale = currentDist / initialDist;
-          if (pdfWrapperRef.current) {
-            pdfWrapperRef.current.style.transform = `scale(${pinchScale})`;
-            pdfWrapperRef.current.style.transformOrigin = "top center";
-            pdfWrapperRef.current.style.transition = "none";
-          }
+          wrapper.style.transform = `scale(${pinchScale})`;
+          wrapper.style.transformOrigin = "top center";
+          wrapper.style.transition = "none";
         }
       }
     };
@@ -112,36 +121,24 @@ const PlanViewer = () => {
         if (pinchScale !== 1) {
           setZoom(prev => Math.min(Math.max(0.5, prev * pinchScale), 4));
         }
-        if (pdfWrapperRef.current) {
-          pdfWrapperRef.current.style.transform = `scale(1)`;
-        }
+        wrapper.style.transform = `scale(1)`;
         initialDist = 0;
         pinchScale = 1;
       }
     };
 
-    document.addEventListener('wheel', handleWheel, { passive: false });
-    
-    const scrollContainer = document.getElementById('pdf-scroll-container');
-    if (scrollContainer) {
-      scrollContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
-      scrollContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
-      scrollContainer.addEventListener('touchend', handleTouchEnd);
-    }
+    wrapper.addEventListener('touchstart', handleTouchStart, { passive: false });
+    wrapper.addEventListener('touchmove', handleTouchMove, { passive: false });
+    wrapper.addEventListener('touchend', handleTouchEnd);
 
     return () => {
-      if (viewportMeta && originalViewport) {
-        viewportMeta.setAttribute('content', originalViewport);
-      }
-      document.removeEventListener('wheel', handleWheel);
-      if (scrollContainer) {
-        scrollContainer.removeEventListener('touchstart', handleTouchStart);
-        scrollContainer.removeEventListener('touchmove', handleTouchMove);
-        scrollContainer.removeEventListener('touchend', handleTouchEnd);
-      }
+      wrapper.removeEventListener('touchstart', handleTouchStart);
+      wrapper.removeEventListener('touchmove', handleTouchMove);
+      wrapper.removeEventListener('touchend', handleTouchEnd);
     };
   }, []);
 
+  // Navbar Auto-Hide Logic
   const handleScroll = (e) => {
     const currentScrollY = e.target.scrollTop;
     if (currentScrollY > lastScrollY && currentScrollY > 60) {
@@ -184,13 +181,13 @@ const PlanViewer = () => {
   const basePdfWidth = Math.min(containerWidth * 0.95, 800);
 
   return (
+    // 🚨 FIX 1: "fixed inset-0" ensures the window itself NEVER scrolls on mobile, only the inner container.
     <div 
-      className="relative flex flex-col flex-grow w-full bg-[#e2e8f0] overflow-hidden" 
-      style={{ height: 'calc(100vh - 64px)' }} 
+      className="fixed inset-0 bg-[#e2e8f0] overflow-hidden" 
       onContextMenu={handleContextMenu}
     >
       
-      {/* 🌟 AUTO-HIDING TITLE BAR IS BACK */}
+      {/* 🌟 AUTO-HIDING TITLE BAR */}
       <div 
         className={`absolute top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 px-6 py-4 flex items-center justify-between z-40 transition-transform duration-300 ease-in-out ${showNav ? 'translate-y-0' : '-translate-y-full'}`}
       >
@@ -225,15 +222,16 @@ const PlanViewer = () => {
         </button>
       </div>
 
-      {/* 🌟 NATIVE DESKTOP SCROLL CONTAINER */}
-      {/* touch-action: pan-x pan-y allows normal scrolling but tells Safari/Chrome to ignore pinching */}
+      {/* 🌟 NATIVE SCROLL CONTAINER */}
       <div 
         id="pdf-scroll-container"
-        className="flex-grow w-full h-full overflow-auto pt-24 pb-32" 
-        style={{ touchAction: 'pan-x pan-y' }}
+        className="absolute inset-0 overflow-auto pt-24 pb-32" 
+        style={{ WebkitOverflowScrolling: 'touch' }} // 🚨 FIX 2: Restores native momentum swipe on iPhones
         onScroll={handleScroll}
       >
+        {/* w-fit min-w-full prevents left-side clipping when zoomed */}
         <div className="w-fit min-w-full mx-auto">
+          {/* Target for our CSS Pinch Zoom layer */}
           <div ref={pdfWrapperRef} className="flex flex-col items-center px-4 origin-top">
             
             <Document
