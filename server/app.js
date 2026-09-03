@@ -2479,7 +2479,8 @@ app.post("/get-plan-details", async (req, res) => {
       console.error("Admin App Notification Error:", notifErr);
     }
 
-    // 4D. WHATSAPP MESSAGE
+    // 4D. WHATSAPP MESSAGE (Temporarily Disabled to save costs and avoid WebView bugs)
+    /*
     try {
       const botNumberId = process.env.PHONE_NUMBER_ID || "1049944734868137"; 
       
@@ -2518,6 +2519,7 @@ app.post("/get-plan-details", async (req, res) => {
     } catch (waErr) {
       console.error("WhatsApp Send Error:", waErr.response?.data || waErr.message);
     }
+    */
 
     // 5. FINISH
     res.status(200).json({ success: true, message: "Details sent successfully!" });
@@ -2527,7 +2529,6 @@ app.post("/get-plan-details", async (req, res) => {
     res.status(500).json({ error: "Failed to process your request. Please try again." });
   }
 });
-
 // ==========================================
 // FETCH BROCHURE DETAILS FOR PDF VIEWER
 // ==========================================
