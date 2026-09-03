@@ -47,6 +47,15 @@ const PlanViewer = () => {
     fetchBrochureData();
   }, [id]);
 
+  // 🌟 GUARANTEE MOBILE BROWSER ZOOM IS ALLOWED
+  // This overwrites any restrictive tags in your index.html so the phone can pinch natively.
+  useEffect(() => {
+    const viewportMeta = document.querySelector('meta[name="viewport"]');
+    if (viewportMeta) {
+      viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
+    }
+  }, []);
+
   // 🌟 DESKTOP NATIVE ZOOM ONLY
   // Mobile touch listeners are completely removed to allow standard browser pinch-to-zoom
   useEffect(() => {
