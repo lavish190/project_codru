@@ -1,7 +1,12 @@
 {
   "name": "cute-mail-service",
   "version": "1.0.0",
+  "type": "module",
   "dependencies": {
+    "express": "^5.2.1",
     "nodemailer": "^6.9.0"
+  },
+  "scripts": {
+    "start": "node api/send.js"
   }
 }

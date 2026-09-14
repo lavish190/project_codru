@@ -1,14 +1,19 @@
-const nodemailer = require("nodemailer");
+import express from "express";
+import nodemailer from "nodemailer";
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+const app = express();
 
+app.use(express.json());
+
+app.post("/send", async (req, res) => {
   const authHeader = req.headers.authorization;
+
   if (authHeader !== `Bearer ${process.env.MICROSERVICE_SECRET}`) {
-    return res.status(401).json({ error: "Unauthorized. Invalid API Key." });
+    return res.status(401).json({
+      error: "Unauthorized"
+    });
   }
 
-  // 🚨 Now it just accepts the raw mailOptions object from your Render backend!
   const { mailOptions } = req.body;
 
   try {
@@ -17,17 +22,26 @@ export default async function handler(req, res) {
       port: 465,
       secure: true,
       auth: {
-        user: process.env.EMAIL,       
-        pass: process.env.PASSWORD     
+        user: process.env.EMAIL,
+        pass: process.env.PASSWORD
       }
     });
 
-    // Vercel plugs your exact mailOptions directly into the real Nodemailer
     const info = await transporter.sendMail(mailOptions);
-    
-    res.status(200).json({ success: true, info });
+
+    res.status(200).json({
+      success: true,
+      info
+    });
   } catch (error) {
-    console.error("Microservice Error:", error);
-    res.status(500).json({ error: "Failed to send email." });
+    console.log(error);
+
+    res.status(500).json({
+      error: "Failed to send email"
+    });
   }
-}
+});
+
+app.listen(5001, () => {
+  console.log("Mail service running on port 5001");
+});
