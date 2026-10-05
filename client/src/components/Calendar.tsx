@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon } from 'lucide-react';
 import EventModal from './EventModal'; 
+import FunDatePicker from "./FunDatePicker"; // Adjust the path if necessary
 
 // --- TYPES ---
 export interface CalendarEvent {
@@ -32,14 +33,16 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  // 🚨 NEW: State for Mobile Day View Popup
+  
+  // State for Mobile Day View Popup
   const [showMobileDayView, setShowMobileDayView] = useState(false);
   const [mobileSelectedDate, setMobileSelectedDate] = useState<Date | null>(null);
   const [guestSearch, setGuestSearch] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]); // Will hold your global search results
-  const [selectedGuests, setSelectedGuests] = useState<string[]>([]); // Holds the usernames
+  const [searchResults, setSearchResults] = useState<any[]>([]); 
+  const [selectedGuests, setSelectedGuests] = useState<string[]>([]); 
   const [addGoogleMeet, setAddGoogleMeet] = useState(false);
-  // 🚨 NEW: State for our custom Add Event Modal
+  
+  // State for our custom Add Event Modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [newEventDraft, setNewEventDraft] = useState({
     id: "",
@@ -49,25 +52,19 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
     reminderMinutes: 15
   });
 
-  // --- 🚨 NEW: GLOBAL SEARCH DEBOUNCE EFFECT ---
+  // --- GLOBAL SEARCH DEBOUNCE EFFECT ---
   useEffect(() => {
-    // 1. Set a timer to wait 500ms after the user stops typing
     const delayDebounceFn = setTimeout(async () => {
-      
-      // 2. Only search if they typed at least 2 characters
       if (guestSearch.trim().length > 1) {
         try {
           const token = localStorage.getItem("jwtoken");
           
-          // 🚨 IMPORTANT: Change "search-users" to whatever your actual global search endpoint is!
           const res = await fetch(`${import.meta.env.VITE_API}search-users?q=${guestSearch}`, {
             headers: { "Authorization": `Bearer ${token}` }
           });
           
           if (res.ok) {
             const data = await res.json();
-            // Ensure we filter out the person currently logged in so they can't invite themselves
-            // Also filter out people who are already in the selectedGuests array
             const filteredData = data.filter((user: any) => 
                !selectedGuests.includes(user.username) 
             );
@@ -77,14 +74,12 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
           console.error("Global search failed:", error);
         }
       } else {
-        // Clear results if the search box is empty
         setSearchResults([]);
       }
-    }, 500); // Wait half a second
+    }, 500); 
 
-    // Cleanup the timer if the user types another letter before 500ms is up
     return () => clearTimeout(delayDebounceFn);
-  }, [guestSearch, selectedGuests]); // Runs whenever guestSearch text changes
+  }, [guestSearch, selectedGuests]); 
 
   // --- API FETCHING ---
   useEffect(() => {
@@ -157,22 +152,19 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
     setSelectedEvent(event);
   };
 
-  // 🚨 NEW: Open the Modal instead of browser prompt
-  // Put this inside Calendar.tsx
   const handleDateClick = (day: number) => {
     if (selectedStudentUsername) return; 
     
     const clickedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
     
     setNewEventDraft({
-      id: "", // Blank ID means it's a NEW event
+      id: "", 
       title: "",
       date: clickedDate,
       time: "12:00", 
       reminderMinutes: 15
     });
 
-    // Reset all form states
     setGuestSearch("");
     setSearchResults([]);
     setSelectedGuests([]);
@@ -180,11 +172,9 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
     setShowAddModal(true);
   };
 
-  // 🚨 NEW: Combine date/time, update UI, and send to backend
   const handleSaveEvent = async () => {
     if (!newEventDraft.title.trim()) return alert("Please enter a title");
 
-    // Combine Date and Time
     const [hours, minutes] = newEventDraft.time.split(':');
     const finalEventDate = new Date(newEventDraft.date);
     finalEventDate.setHours(Number(hours), Number(minutes), 0, 0);
@@ -199,9 +189,8 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
       addMeet: addGoogleMeet
     };
 
-    const isEditing = newEventDraft.id !== ""; // 🚨 NEW: Check if we are editing
+    const isEditing = newEventDraft.id !== ""; 
 
-    // Optimistic UI Update
     if (isEditing) {
       setEvents(prev => prev.map(e => e.id === newEventDraft.id ? { 
         ...e, 
@@ -217,13 +206,12 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
         date: finalEventDate, 
         type: newEventPayload.type as 'class' | 'task', 
         color: newEventPayload.color,
-        creatorId: currentUserId // Assign ownership immediately
+        creatorId: currentUserId 
       }]);
     }
     
     setShowAddModal(false);
 
-    // Send to Backend
     try {
       const token = localStorage.getItem("jwtoken");
       const endpoint = isEditing 
@@ -243,12 +231,9 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
     }
   };
 
-  // --- 🚨 NEW: EDIT LOGIC ---
-  // --- EDIT LOGIC ---
   const handleEditEvent = (eventToEdit: CalendarEvent) => {
-    setSelectedEvent(null); // Close the view modal
+    setSelectedEvent(null); 
 
-    // 1. Populate the draft with the event's data
     setNewEventDraft({
       id: eventToEdit.id,
       title: eventToEdit.title,
@@ -257,19 +242,12 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
       reminderMinutes: 15 
     });
 
-    // 2. 🚨 SET THE GUESTS AND GOOGLE MEET STATE
     setSelectedGuests(eventToEdit.guests || []);
-    
-    // If the event already has a meetLink, check the box automatically!
     setAddGoogleMeet(!!eventToEdit.meetLink); 
-
-    setShowAddModal(true); // Open the form modal
+    setShowAddModal(true); 
   };
 
   const handleDeleteEvent = async (eventToDelete: CalendarEvent) => {
-    // 🚨 CRITICAL CHECK: 
-    // Google IDs look like '5o3lqg...', MongoDB IDs are usually 24-char hex strings.
-    // We only allow deleting if it has a valid MongoDB ID.
     if (eventToDelete.id.length > 30) { 
       return alert("This is a direct Google Calendar event and cannot be deleted from here.");
     }
@@ -302,8 +280,6 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
     const today = new Date();
 
     for (let i = 0; i < firstDayOfMonth; i++) {
-      // 🚨 THE FIX: Match the exact responsive height of the real days (h-16 sm:h-20 md:h-28)
-      // I also added a faint border so the grid looks complete!
       days.push(
         <div 
           key={`empty-${i}`} 
@@ -338,13 +314,11 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
             )}
           </div>
           
-          {/* DESKTOP ONLY: Full Event Pills */}
           <div className="hidden md:flex flex-1 flex-col space-y-1 overflow-y-auto custom-scrollbar w-full min-h-0 pr-1">
             {dayEvents.map(event => (
               <div 
                 key={event.id} 
                 onClick={(e) => { e.stopPropagation(); handleEventClick(e, event); }} 
-                // 🚨 THE FIX: Added 'shrink-0' so they don't get squished, and 'py-1' for better height
                 className={`shrink-0 text-[10px] font-medium text-white px-1.5 py-1 rounded shadow-sm truncate cursor-pointer hover:opacity-80 transition ${event.color}`} 
                 title={event.title}
               >
@@ -353,7 +327,6 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
             ))}
           </div>
 
-          {/* MOBILE ONLY: Minimal Event Dots */}
           <div className="md:hidden flex flex-wrap items-center justify-center gap-1 mt-1 px-0.5">
             {dayEvents.slice(0, 3).map(event => (
               <span key={event.id} className={`w-1.5 h-1.5 shrink-0 rounded-full ${event.color}`}></span>
@@ -368,17 +341,15 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
       );
     }
 
-    // 🚨 Calculate the next 2 upcoming events to display in the empty space!
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const upcomingPreview = events
       .filter(e => e.date.getTime() >= todayStart.getTime())
       .sort((a, b) => a.date.getTime() - b.date.getTime())
-      .slice(0, 2); // Show only the next 2 so it fits perfectly
+      .slice(0, 2); 
 
     return (
       <div className="flex flex-col h-full">
-        {/* The Days Header */}
         <div className="grid grid-cols-7 text-center py-2 md:py-3 border-b border-gray-100 bg-gray-50 text-gray-500 font-bold text-[10px] md:text-sm uppercase tracking-wider shrink-0">
           <div><span className="md:hidden">S</span><span className="hidden md:inline">Sun</span></div>
           <div><span className="md:hidden">M</span><span className="hidden md:inline">Mon</span></div>
@@ -389,10 +360,8 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
           <div><span className="md:hidden">S</span><span className="hidden md:inline">Sat</span></div>
         </div>
         
-        {/* The Grid */}
         <div className="grid grid-cols-7 bg-gray-100 gap-px shrink-0">{days}</div>
 
-        {/* 🚨 THE FIX: "Up Next" Mobile Agenda to beautifully fill the empty space */}
         <div className="md:hidden flex-1 bg-slate-50/50 p-4 border-t border-gray-100 flex flex-col justify-center">
           <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5 pl-1">
             <CalendarIcon size={12} className="text-brand-orange" /> Coming Up Next
@@ -400,7 +369,11 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
           {upcomingPreview.length > 0 ? (
             <div className="space-y-2">
               {upcomingPreview.map(event => (
-                <div key={`preview-${event.id}`} className={`p-3 rounded-2xl flex items-center gap-3 shadow-sm ${event.color}`}>
+                <div 
+                  key={`preview-${event.id}`} 
+                  onClick={(e) => handleEventClick(e, event)}
+                  className={`p-3 rounded-2xl flex items-center gap-3 shadow-sm cursor-pointer active:scale-95 transition-transform ${event.color}`}
+                >
                   <div className="bg-white/20 px-2.5 py-1.5 rounded-lg text-white font-bold whitespace-nowrap text-[10px]">
                     {getFormatTime(event.date)}
                   </div>
@@ -437,7 +410,6 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
       const dayEvents = events.filter(e => e.date.toDateString() === dayDate.toDateString());
       dayEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-      // 🚨 RESTORED: The proper tall vertical columns for the week view!
       days.push(
         <div key={i} className={`min-h-100 p-2 md:p-3 border-r border-gray-100 ${isToday ? 'bg-blue-50/30' : 'bg-white'}`}>
           <div className="text-center mb-4">
@@ -465,10 +437,9 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
       );
     }
     
-    // 🚨 MOBILE FIX: Keeps the horizontal swiping for phones!
     return (
-      <div className="overflow-x-auto custom-scrollbar w-full pb-2">
-        <div className="grid grid-cols-7 bg-gray-100 gap-px border-t border-gray-100 min-w-175">
+      <div className="overflow-x-auto custom-scrollbar w-full pb-2 h-full">
+        <div className="grid grid-cols-7 bg-gray-100 gap-px border-t border-gray-100 min-w-175 min-h-full">
           {days}
         </div>
       </div>
@@ -480,7 +451,7 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
     dayEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
 
     return (
-      <div className="min-h-100 p-6 bg-white">
+      <div className="min-h-100 p-6 bg-white h-full">
         <div className="max-w-3xl mx-auto space-y-4">
           {dayEvents.length === 0 ? (
             <div className="text-center py-20 text-gray-400 italic">No events scheduled for this day.</div>
@@ -501,19 +472,12 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
   };
 
   return (
-    <div className="w-full flex flex-col gap-4 md:gap-8 h-full min-h-0 flex-1">
-      {/* 🚨 THE FIX: Added w-full, text-center for mobile, md:text-left for PC */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-0 md:mb-2 gap-4 px-2 shrink-0 w-full">
-        <div className="w-full text-center md:text-left">
-          <h2 className="text-2xl md:text-3xl font-display font-bold text-brand-blue">Class Schedule</h2>
-          <p className="text-gray-500 font-medium text-xs md:text-sm mt-1 mx-auto md:mx-0 max-w-sm">View your upcoming sessions securely</p>
-        </div>
-      </div>
-
-      {/* 🚨 2. Added max-h constraint for mobile, flex-1, and min-h-0 */}
-      <div className="bg-white rounded-lg shadow-lg border border-gray-100 overflow-hidden flex-1 flex flex-col min-h-0 max-h-[calc(100dvh-160px)] md:max-h-none md:min-h-125">
+    <div className="w-full flex flex-col h-full min-h-0 flex-1">
+      {/* FULLSCREEN WRAPPER - NO BORDER OR SHADOW */}
+      <div className="overflow-hidden flex-1 flex flex-col min-h-0 max-h-[calc(100dvh-160px)] md:max-h-none md:min-h-125">
+        
         {/* --- HEADER COMPONENT --- */}
-        <div className="p-4 sm:p-6 border-b border-gray-100 flex items-center justify-between bg-white gap-4">
+        <div className="p-4 sm:p-6 border-b border-gray-100 flex items-center justify-between bg-white gap-4 shrink-0">
           <div className="flex items-center gap-3">
               <div className="p-2 bg-brand-orange/10 rounded-xl text-brand-orange hidden sm:block">
                   <CalendarIcon size={24} />
@@ -523,8 +487,28 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
               </h2>
           </div>
           
-          {/* 🚨 DESKTOP ONLY: Controls (Hidden on Mobile) */}
+          {/* 🚨 MOBILE ONLY: Add Event Button */}
+          {!selectedStudentUsername && (
+            <button 
+              onClick={() => handleDateClick(new Date().getDate())}
+              className="md:hidden flex items-center justify-center w-9 h-9 bg-brand-orange text-white rounded-full shadow-md active:scale-95 transition"
+            >
+              <Plus size={20} strokeWidth={2.5} />
+            </button>
+          )}
+          
+          {/* 🚨 DESKTOP ONLY: Controls */}
           <div className="hidden md:flex items-center justify-end w-auto gap-3">
+            {/* NEW ADD BUTTON */}
+            {!selectedStudentUsername && (
+              <button 
+                onClick={() => handleDateClick(new Date().getDate())}
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-brand-orange text-white text-xs font-bold rounded-xl shadow-sm hover:bg-orange-600 transition-colors active:scale-95"
+              >
+                <Plus size={16} strokeWidth={3} /> New Event
+              </button>
+            )}
+            
             <div className="flex bg-slate-100 p-1 rounded-xl justify-center">
               {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
                 <button key={mode} onClick={() => setView(mode)} className={`px-4 py-1.5 text-xs font-bold capitalize rounded-lg transition-all ${view === mode ? 'bg-white text-brand-blue shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -539,7 +523,7 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
           </div>
         </div>
         
-        {/* 🚨 3. The Fluid Core: This div handles all the scrolling! */}
+        {/* The Fluid Core */}
         <div className="flex-1 overflow-y-auto custom-scrollbar relative bg-slate-50/20">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-32 h-full">
@@ -547,17 +531,16 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
               <p className="text-gray-400 font-medium font-display tracking-wide">Fetching schedule...</p>
             </div>
           ) : (
-            <div className="pb-4 md:pb-0"> {/* Slight padding at the bottom of the scroll */}
+            <div className="pb-4 md:pb-0 h-full">
               {view === 'month' && renderMonthView()}
               {view === 'week' && renderWeekView()}
               {view === 'day' && renderDayView()}
             </div>
           )}
         </div>
+        
         {/* 🚨 MOBILE ONLY: Thumb-Friendly Bottom Navigation Bar */}
         <div className="md:hidden mt-auto border-t border-gray-100 p-3 bg-white flex items-center justify-between gap-2 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] relative z-10">
-          
-          {/* Day/Week/Month Toggles */}
           <div className="flex bg-slate-100 p-1 rounded-xl flex-1 max-w-55">
             {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
               <button key={mode} onClick={() => setView(mode)} className={`flex-1 py-1.5 text-[11px] font-bold capitalize rounded-lg transition-all ${view === mode ? 'bg-white text-brand-blue shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -566,35 +549,32 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
             ))}
           </div>
 
-          {/* Navigation Arrows */}
           <div className="flex gap-1.5 shrink-0 ml-auto">
             <button onClick={() => navigateDate(-1)} className="p-2 bg-gray-50 text-gray-600 active:bg-gray-200 rounded-full transition shadow-sm border border-gray-100"><ChevronLeft size={18} /></button>
             <button onClick={() => navigateDate(1)} className="p-2 bg-gray-50 text-gray-600 active:bg-gray-200 rounded-full transition shadow-sm border border-gray-100"><ChevronRight size={18} /></button>
           </div>
-          
         </div>
       </div>
 
       {selectedEvent && (
-        <div className="relative z-6650">
+        <div className="relative z-[6650]">
           <EventModal 
             event={selectedEvent} 
             onClose={() => setSelectedEvent(null)} 
             isOwner={Boolean(selectedEvent.creatorId) && String(selectedEvent.creatorId) === String(currentUserId)} 
-            
             onEdit={handleEditEvent}
             onDelete={handleDeleteEvent}
           />
         </div>
       )}
-      {/* 🚨 NEW: MOBILE DAY VIEW POPUP (Bottom Sheet) */}
+      
+      {/* 🚨 MOBILE DAY VIEW POPUP */}
       {showMobileDayView && mobileSelectedDate && (
-        <div className="fixed inset-0 z-500 flex items-end md:items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in pb-16 md:pb-0" onClick={() => setShowMobileDayView(false)}>
+        <div className="fixed inset-0 z-[500] flex items-end md:items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in pb-16 md:pb-0" onClick={() => setShowMobileDayView(false)}>
           <div 
-            className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transform transition-transform animate-in slide-in-from-bottom-8 md:zoom-in-95 z-500"
-            onClick={(e) => e.stopPropagation()} // Prevents clicking the backdrop from closing it
+            className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transform transition-transform animate-in slide-in-from-bottom-8 md:zoom-in-95 z-[500]"
+            onClick={(e) => e.stopPropagation()} 
           >
-            {/* Modal Header */}
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0">
               <div>
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -607,8 +587,7 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
               <button onClick={() => setShowMobileDayView(false)} className="w-8 h-8 flex items-center justify-center bg-gray-100 text-gray-500 rounded-full hover:bg-gray-200 transition">✕</button>
             </div>
             
-            {/* Event List */}
-            <div className="p-4 overflow-y-auto flex-1 custom-scrollbar bg-slate-50 min-h-62.5">
+            <div className="p-4 overflow-y-auto flex-1 custom-scrollbar bg-slate-50 min-h-[250px]">
               {events.filter(e => e.date.toDateString() === mobileSelectedDate.toDateString()).length === 0 ? (
                 <div className="text-center py-10">
                   <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner">
@@ -635,13 +614,11 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
               )}
             </div>
             
-            {/* Big "Add Event" Button inside the Mobile Modal */}
             {!selectedStudentUsername && (
               <div className="p-4 bg-white border-t border-gray-100">
                 <button 
                   onClick={() => {
                     setShowMobileDayView(false);
-                    // Pass the tapped day number straight into your existing "Add Event" logic!
                     handleDateClick(mobileSelectedDate.getDate());
                   }}
                   className="w-full flex items-center justify-center gap-2 py-3.5 bg-brand-orange text-white rounded-xl font-bold hover:bg-orange-600 transition shadow-sm active:scale-95"
@@ -653,10 +630,11 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
           </div>
         </div>
       )}
-      {/* 🚨 NEW: ADD EVENT MODAL 🚨 */}
+      
+      {/* 🚨 ADD EVENT MODAL */}
       {showAddModal && (
-        <div className="fixed inset-0 z-500 flex items-center justify-center bg-slate-900/70 backdrop-blur-md pb-16 md:pb-0 px-4">
-          <div className="bg-white rounded-4xl p-8 w-full max-w-md shadow-2xl border border-white/20 transform transition-all animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/70 backdrop-blur-md pb-16 md:pb-0 px-4">
+          <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border border-white/20 transform transition-all animate-in zoom-in-95 duration-200">
             <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
               <CalendarIcon className="w-5 h-5 text-brand-orange" />
               {newEventDraft.id ? "Edit Event" : (role?.toLowerCase() === 'student' ? "Add a Task" : "Schedule a Class")}
@@ -671,17 +649,28 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
                   value={newEventDraft.title}
                   onChange={(e) => setNewEventDraft({ ...newEventDraft, title: e.target.value })}
                   placeholder="e.g., Math Tutoring Session"
-                  
                   className="w-full px-4 py-2 text-base bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-orange outline-none" 
                 />
               </div>
 
-              <div className="flex gap-4">
-                <div className="flex-1">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1 w-full [&>div]:w-full">
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Date</label>
-                  <div className="px-4 py-2 bg-gray-100 border border-gray-200 rounded-xl text-gray-600 font-medium cursor-not-allowed">
-                    {newEventDraft.date.toLocaleDateString()}
-                  </div>
+                  <FunDatePicker 
+                    value={newEventDraft.date.toISOString()} 
+                    placeholder="MM/DD/YYYY"
+                    borderRadius="12px"
+                    backgroundColor="#f9fafb"
+                    textColor="#1e293b"
+                    fontSize="14px"
+                    height="40px"
+                    borderColor="#e5e7eb"
+                    onChange={(newDate) => {
+                      if (newDate) {
+                        setNewEventDraft({ ...newEventDraft, date: new Date(newDate) });
+                      }
+                    }} 
+                  />
                 </div>
                 <div className="flex-1">
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Time</label>
@@ -708,20 +697,16 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
                 </select>
               </div>
 
-              {/* ========================================= */}
-              {/* 🚨 NEW: GUEST SEARCH DROPDOWN GOES HERE 🚨 */}
-              {/* ========================================= */}
               <div className="relative">
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Invite Guests (@username)</label>
                 <input 
                   type="text" 
                   value={guestSearch}
-                  onChange={(e) => setGuestSearch(e.target.value)} // 🚨 Just update state, the useEffect handles the fetch!
+                  onChange={(e) => setGuestSearch(e.target.value)}
                   placeholder="Search usernames..."
                   className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-orange outline-none"
                 />
                 
-                {/* Search Dropdown */}
                 {searchResults.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg max-h-40 overflow-y-auto">
                     {searchResults.map((user: any) => (
@@ -742,7 +727,6 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
                   </div>
                 )}
 
-                {/* Selected Guest Chips */}
                 {selectedGuests.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {selectedGuests.map(username => (
@@ -755,9 +739,6 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
                 )}
               </div>
 
-              {/* ========================================= */}
-              {/* 🚨 NEW: GOOGLE MEET TOGGLE GOES HERE 🚨 */}
-              {/* ========================================= */}
               <div className="flex items-center gap-3 pt-2">
                 <input 
                   type="checkbox" 
@@ -771,7 +752,7 @@ const Calendar: React.FC<CalendarProps> = ({ role, selectedStudentUsername, curr
                 </label>
               </div>
 
-            </div> {/* <-- Closes the space-y-4 div */}
+            </div> 
 
             <div className="flex gap-3 mt-8">
               <button 

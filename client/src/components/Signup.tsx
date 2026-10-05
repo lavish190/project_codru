@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { 
-  Email, Lock, Phone, Person, Badge as BadgeIcon 
+  Email, Lock, Phone, Person, Badge as BadgeIcon, Visibility, VisibilityOff
 } from "@mui/icons-material";
 import {
-  TextField, Button, InputAdornment, Checkbox, Dialog, DialogContent, Select, MenuItem
+  TextField, Button, InputAdornment, Checkbox, Dialog, Select, MenuItem, IconButton
 } from "@mui/material";
 
 // Components & Assets
@@ -35,6 +35,11 @@ function Signup() {
   const [open, setOpen] = useState(false);
   const [timer, setTimer] = useState<number | null>(null);
   const [countryCode, setCountryCode] = useState("+91");
+  
+  // 🚨 NEW: Password Visibility States
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
   const navigate = useNavigate();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,7 +47,8 @@ function Signup() {
     setValue((prev) => ({
       ...prev,
       [name]: val,
-      ...(name === "email" && { isEmailVerified: false }),
+      // If they edit the email after verifying, reset verification status
+      ...(name === "email" && { isEmailVerified: false }), 
     }));
   };
 
@@ -54,7 +60,7 @@ function Signup() {
       const res = await fetch(`${import.meta.env.VITE_API}generate-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: value.email }),
+        body: JSON.stringify({ email: value.email.toLowerCase().trim() }),
       });
 
       if (res.ok) {
@@ -74,18 +80,34 @@ function Signup() {
   };
 
   const handleOtpComplete = async (finalValue: string) => {
-    const res = await fetch(`${import.meta.env.VITE_API}verify-email`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: value.email, otp: finalValue }),
-    });
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API}verify-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: value.email.toLowerCase().trim(), otp: finalValue }),
+      });
 
-    if (res.ok) {
-      setValue((prev) => ({ ...prev, isEmailVerified: true }));
-      setOpen(false);
-    } else {
-      const data = await res.json();
-      setAlertMessage(data.error || "OTP Verification Failed");
+      if (res.ok) {
+        const data = await res.json();
+        
+        // 🚨 BULLETPROOF: Block sign-up if the email already belongs to an existing user
+        if (data.existingUser) {
+           setOpen(false);
+           setValue(prev => ({ ...prev, otp: "", isEmailVerified: false }));
+           setAlertMessage("An account with this email already exists. Please sign in instead.");
+           setShowAlert(true);
+           return;
+        }
+
+        setValue((prev) => ({ ...prev, isEmailVerified: true }));
+        setOpen(false);
+      } else {
+        const data = await res.json();
+        setAlertMessage(data.error || "OTP Verification Failed");
+        setShowAlert(true);
+      }
+    } catch (err) {
+      setAlertMessage("Network error. Failed to verify OTP.");
       setShowAlert(true);
     }
   };
@@ -102,6 +124,13 @@ function Signup() {
 
     if (!value.isEmailVerified) {
       setAlertMessage("Please verify your email first.");
+      setShowAlert(true);
+      return;
+    }
+
+    // 🚨 BULLETPROOF: Frontend password match check to save an API call
+    if (value.password !== value.cpassword) {
+      setAlertMessage("Passwords do not match.");
       setShowAlert(true);
       return;
     }
@@ -284,13 +313,40 @@ function Signup() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <TextField
-                fullWidth variant="outlined" name="password" type="password" label="Password" value={value.password} onChange={handleChange} required
-                slotProps={{ input: { startAdornment: (<InputAdornment position="start"><Lock className="text-brand-blue" /></InputAdornment>) } }}
+                fullWidth variant="outlined" name="password" 
+                type={showPassword ? "text" : "password"} 
+                label="Password" value={value.password} onChange={handleChange} required
+                slotProps={{ 
+                  input: { 
+                    startAdornment: (<InputAdornment position="start"><Lock className="text-brand-blue" /></InputAdornment>),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton onClick={() => setShowPassword(!showPassword)} edge="end" size="small">
+                          {showPassword ? <VisibilityOff fontSize="small" className="text-gray-400" /> : <Visibility fontSize="small" className="text-gray-400" />}
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  } 
+                }}
                 sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
               />
               <TextField
-                fullWidth variant="outlined" name="cpassword" type="password" label="Confirm Password" value={value.cpassword} onChange={handleChange} required
-                slotProps={{ input: { startAdornment: (<InputAdornment position="start"><Lock className="text-brand-blue" /></InputAdornment>) } }}
+                fullWidth variant="outlined" name="cpassword" 
+                type={showConfirmPassword ? "text" : "password"} 
+                label="Confirm Password" value={value.cpassword} onChange={handleChange} required
+                error={value.cpassword.length > 0 && value.password !== value.cpassword}
+                slotProps={{ 
+                  input: { 
+                    startAdornment: (<InputAdornment position="start"><Lock className="text-brand-blue" /></InputAdornment>),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton onClick={() => setShowConfirmPassword(!showConfirmPassword)} edge="end" size="small">
+                          {showConfirmPassword ? <VisibilityOff fontSize="small" className="text-gray-400" /> : <Visibility fontSize="small" className="text-gray-400" />}
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  } 
+                }}
                 sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
               />
             </div>
@@ -311,10 +367,15 @@ function Signup() {
               />
             </div>
 
+      
             <div className="w-full [&>div]:w-full">
-              <FunDatePicker value={value.dob} onChange={(newDate) => setValue({ ...value, dob: newDate || "" })} />
+              <FunDatePicker 
+                label="Date of Birth"
+                value={value.dob} 
+                onChange={(newDate) => setValue({ ...value, dob: newDate || "" })} 
+              />
             </div>
-
+           
             <button
               type="submit"
               className="w-full bg-brand-orange text-white py-4 rounded-xl font-bold text-lg hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/30 transform hover:-translate-y-0.5"
@@ -328,7 +389,6 @@ function Signup() {
             <div className="relative flex justify-center text-xs font-bold uppercase tracking-widest"><span className="px-4 bg-white text-gray-400">Or continue with</span></div>
           </div>
 
-          {/* 🚀 NEW: Clean Full-Width Google Button */}
           <button 
             onClick={() => {
               const returnTo = sessionStorage.getItem("redirectPath") || "/";
@@ -346,7 +406,6 @@ function Signup() {
         </div>
       </div>
 
-      {/* 🚨 BULLETPROOF CUSTOM OTP DIALOG */}
       <Dialog 
         open={open} 
         onClose={(event, reason) => { if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') setOpen(false); }}
@@ -369,7 +428,6 @@ function Signup() {
                 autoFocus={index === 0}
                 onPaste={(e) => {
                   e.preventDefault();
-                  // Handle pasting a 4-digit code
                   const pasteData = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
                   if (pasteData) {
                     setValue(prev => ({ ...prev, otp: pasteData }));
@@ -377,28 +435,24 @@ function Signup() {
                   }
                 }}
                 onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, ""); // Allow numbers only
-                  if (!val && e.target.value !== "") return; // Reject letters
+                  const val = e.target.value.replace(/\D/g, ""); 
+                  if (!val && e.target.value !== "") return; 
                   
-                  // Update state securely
                   const otpArray = value.otp.split("");
                   otpArray[index] = val;
                   const newOtp = otpArray.join("");
                   setValue(prev => ({ ...prev, otp: newOtp }));
 
-                  // Auto-advance focus
                   if (val && index < 3) {
                     const nextInput = document.getElementById(`otp-input-${index + 1}`);
                     if (nextInput) nextInput.focus();
                   }
 
-                  // Auto-submit when exactly 4 digits are typed
                   if (newOtp.length === 4) {
                     handleOtpComplete(newOtp);
                   }
                 }}
                 onKeyDown={(e) => {
-                  // Smooth backspacing to previous input
                   if (e.key === "Backspace" && !value.otp[index] && index > 0) {
                     const prevInput = document.getElementById(`otp-input-${index - 1}`);
                     if (prevInput) prevInput.focus();

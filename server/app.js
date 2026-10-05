@@ -1,7 +1,7 @@
 const express = require("express");
 const dotenv = require("dotenv");
 const bodyParser = require("body-parser");
-const startCalendarCron = require('./utils/cronJobs');
+const startAllCronJobs = require('./utils/cronJobs');
 const cors = require("cors");
 const axios = require("axios");
 const path = require("path");
@@ -12,6 +12,7 @@ const Post = require("./models/postSchema"); // Check if your path/filename is c
 const User = require("./models/userSchema");
 const jwt = require("jsonwebtoken");
 const http = require('http');
+const Counselor = require("./models/counselorSchema");
 const sendAutoNotification = require("./utils/notify");
 const welcomeTemplate = require("./utils/welcomeTemplate"); // For consistent welcome emails
 const { contactUsTemplate } = require("./utils/contactUsTemplate"); // For consistent contact email formatting
@@ -56,7 +57,8 @@ io.on("connection", (socket) => {
 // 2. THE SECRET SAUCE: Attach 'io' to the Express app!
 app.set('io', io);
 
-startCalendarCron(app);
+startAllCronJobs(app);
+
 // 1. Define the allowed origins
 const allowedOrigins = [
   process.env.FRONTEND_URL,
@@ -113,6 +115,7 @@ app.use(require("./router/notification.js"));
 app.use(require('./router/whatsapp'));
 app.use(require('./router/crm')); 
 app.use(require('./router/overview'));
+app.use(require('./router/admissionRoutes.js'));
 app.use("/internship",require("./router/InternshipRoutes.js"));
 app.use("/api/payment", paymentRoutes);
 
@@ -197,20 +200,19 @@ app.post("/unlock-attachment", authenticate, async (req, res) => {
     res.status(500).json({ error: "Server error unlocking file" });
   }
 });
-
 // ==========================================
-// GOOGLE CALENDAR API (FILTERED BY GUEST LIST)
+// GOOGLE CALENDAR API (FILTERED & MERGED)
 // ==========================================
 app.get("/calendar-events", authenticate, async (req, res) => {
   try {
     const currentTime = Date.now();
+    const timeLimit = new Date();
+    timeLimit.setMonth(timeLimit.getMonth() - 3); 
     
     // ==========================================
-    // 1. REFRESH CACHE LOGIC (Google Calendar)
+    // 1. REFRESH CACHE LOGIC
     // ==========================================
     if (currentTime - lastFetchTime > CACHE_DURATION) {
-      console.log("Fetching fresh data from Google Calendar...");
-      
       try {
         const auth = new google.auth.GoogleAuth({
           credentials: {
@@ -223,14 +225,12 @@ app.get("/calendar-events", authenticate, async (req, res) => {
         const calendar = google.calendar({ version: 'v3', auth });
         let allMappedEvents = [];
         let pageToken = null;
-        const timeLimit = new Date();
-        timeLimit.setMonth(timeLimit.getMonth() - 3); 
 
         do {
           const response = await calendar.events.list({
             calendarId: process.env.GOOGLE_CALENDAR_ID,
             maxResults: 2500,
-            singleEvents: true,
+            singleEvents: true, // Expands recurring events into instances
             orderBy: 'startTime',
             timeMin: timeLimit.toISOString(),
             conferenceDataVersion: 1, 
@@ -252,11 +252,9 @@ app.get("/calendar-events", authenticate, async (req, res) => {
               description: event.description || null,
               attendees: event.attendees ? event.attendees.map(a => a.email.toLowerCase()) : [],
               organizer: event.organizer?.email || "",
+              status: event.status, // Needed to detect cancelled instances
               attachments: event.attachments ? event.attachments.map(att => ({ 
-                title: att.title,
-                fileUrl: att.fileUrl,
-                fileId: att.fileId,     // 🚨 ADD THIS: Needed for the unlock loading state
-                mimeType: att.mimeType
+                title: att.title, fileUrl: att.fileUrl, fileId: att.fileId, mimeType: att.mimeType
               })) : []
             };
           });
@@ -273,7 +271,7 @@ app.get("/calendar-events", authenticate, async (req, res) => {
     }
 
     // ==========================================
-    // 2. MONGODB QUERY (Owners & Guests)
+    // 2. MONGODB FETCH
     // ==========================================
     const userRole = req.user.role?.toLowerCase() || req.user.Role?.toLowerCase() || 'student';
     const currentUsername = req.user.username || '';
@@ -281,88 +279,114 @@ app.get("/calendar-events", authenticate, async (req, res) => {
     let localEvents = [];
 
     if (userRole === 'teacher' && req.query.username) {
-      // Teacher viewing a specific student's calendar
       const targetStudent = await User.findOne({ username: req.query.username });
       if (targetStudent) {
         targetEmail = targetStudent.email.toLowerCase();
-        localEvents = await Event.find({
-          $or: [
-            { user: targetStudent._id }, 
-            { guests: targetStudent.username }
-          ]
-        });
+        localEvents = await Event.find({ $or: [{ user: targetStudent._id }, { guests: targetStudent.username }] });
       }
     } else {
-      // Normal flow: Fetch events the user created OR was invited to as a guest
       const queryOr = [{ user: req.user._id }];
       if (currentUsername) queryOr.push({ guests: currentUsername });
-      
       localEvents = await Event.find({ $or: queryOr });
     }
 
     // ==========================================
-    // 3. ENHANCING MONGODB EVENTS & ID MAPPING
+    // 3. SMART MERGE & AUTO-HEALING
     // ==========================================
-    const localGoogleIds = new Set();
-    
-    const enhancedLocalEvents = localEvents.map(localEvent => {
+    const finalEventsToSend = [];
+    const processedGoogleBaseIds = new Set();
+    const getBaseId = (id) => id.split('_')[0]; // Strips the timestamp from recurring instances
+
+    for (const localEvent of localEvents) {
       const dbEvent = localEvent.toObject();
-      if (dbEvent.googleEventId) localGoogleIds.add(dbEvent.googleEventId);
+      const isWithinFetchWindow = new Date(dbEvent.date) >= timeLimit;
+
+      if (dbEvent.googleEventId) {
+        // Find ALL instances of this recurring event in Google Calendar
+        const googleInstances = cachedEvents.filter(ge => 
+          getBaseId(ge.id) === dbEvent.googleEventId && ge.status !== 'cancelled'
+        );
+
+        if (googleInstances.length === 0) {
+          // AUTO-HEAL: If within the 3-month fetch window but missing from Google, it was deleted externally!
+          if (isWithinFetchWindow) {
+            console.log(`🧹 Auto-healing: Deleting ghost event from DB (${dbEvent.title})`);
+            await Event.findByIdAndDelete(dbEvent._id);
+          } else {
+            // It's just old. Send the original DB record.
+            finalEventsToSend.push({ ...dbEvent, id: dbEvent._id.toString(), creatorId: dbEvent.user?.toString() });
+          }
+        } else {
+          // VALID RECURRING EVENT: Inject DB attachments into the individual Google instances and send them
+          googleInstances.forEach(inst => {
+            finalEventsToSend.push({
+              ...inst,
+              id: inst.id, // Preserve the instance ID for UI interaction
+              dbEventId: dbEvent._id.toString(), // Hide DB ID here for reference
+              creatorId: dbEvent.user?.toString(),
+              guests: dbEvent.guests || [],
+              attachments: dbEvent.attachments || inst.attachments || [],
+              color: dbEvent.color // Preserve custom colors
+            });
+          });
+          processedGoogleBaseIds.add(dbEvent.googleEventId);
+        }
+      } else {
+        // Pure Local Event (No Google Sync)
+        finalEventsToSend.push({
+          ...dbEvent,
+          id: dbEvent._id.toString(),
+          creatorId: dbEvent.user?.toString(),
+          guests: dbEvent.guests || []
+        });
+      }
+    }
+
+    // ==========================================
+    // 4. STANDALONE GOOGLE CALENDAR EVENTS
+    // ==========================================
+    for (const ge of cachedEvents) {
+      const baseId = getBaseId(ge.id);
       
-      const matchingGoogleEvent = cachedEvents.find(ge => ge.id === dbEvent.googleEventId);
-      
-      return {
-        ...dbEvent,
-        id: dbEvent._id.toString(), // Must be string for React
-        creatorId: dbEvent.user ? dbEvent.user.toString() : null, // 🚨 Maps db 'user' to frontend 'creatorId'
-        guests: dbEvent.guests || [],
-        attachments: matchingGoogleEvent ? matchingGoogleEvent.attachments : (dbEvent.attachments || [])
-      };
-    });
+      if (processedGoogleBaseIds.has(baseId) || ge.status === 'cancelled') continue;
 
-    // ==========================================
-    // 4. GOOGLE CALENDAR FILTERING
-    // ==========================================
-    const standaloneGoogleEvents = cachedEvents.filter(event => {
-      // Skip if we already merged this event with a MongoDB record
-      if (localGoogleIds.has(event.id)) return false;
+      if (targetEmail === 'admin@curiousteamlearning.com') {
+        finalEventsToSend.push(ge);
+      } else {
+        const isAttendee = ge.attendees && ge.attendees.includes(targetEmail);
+        const isOrganizer = ge.organizer && ge.organizer.toLowerCase() === targetEmail;
+        if (isAttendee || isOrganizer) finalEventsToSend.push(ge);
+      }
+    }
 
-      // 🚨 ADMIN/ORGANIZER FIX: The Workspace owner sees the entire Google Calendar
-      if (targetEmail === 'admin@curiousteamlearning.com') return true;
-
-      // For everyone else, they must be an explicit attendee or the organizer
-      const isAttendee = event.attendees && Array.isArray(event.attendees) && event.attendees.includes(targetEmail);
-      const isOrganizer = event.organizer && event.organizer.toLowerCase() === targetEmail;
-      
-      return isAttendee || isOrganizer;
-    });
-
-    // ==========================================
-    // 5. SEND FINAL MERGED ARRAY
-    // ==========================================
-    res.status(200).json([...enhancedLocalEvents, ...standaloneGoogleEvents]);
-
+    res.status(200).json(finalEventsToSend);
   } catch (error) {
     console.error("Calendar fetch error:", error);
     res.status(500).json({ error: "Failed to fetch calendar events" });
   }
 });
 
-// --- DELETE EVENT ---
+// --- DELETE EVENT (SUPPORTS RECURRING INSTANCES) ---
 app.delete("/calendar-events/:id", authenticate, async (req, res) => {
   try {
-    const eventId = req.params.id;
+    const eventId = req.params.id; // Could be a Mongo _id OR a Google Instance ID (e.g., masterId_timestamp)
+    const isInstance = eventId.includes('_');
+    const baseGoogleId = isInstance ? eventId.split('_')[0] : eventId;
 
-    // 1. Find the event in MongoDB
-    const event = await Event.findById(eventId);
+    // 1. Find the parent MongoDB event
+    let event = null;
+    try { 
+      event = await Event.findById(eventId); 
+    } catch(err) { /* Not a valid Mongo ID */ }
+    
+    if (!event) event = await Event.findOne({ googleEventId: baseGoogleId });
     if (!event) return res.status(404).json({ error: "Event not found." });
 
-    // 2. Security Check: Only the creator can delete
     if (!event.user || event.user.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: "Unauthorized: You can only delete your own events." });
     }
 
-    // 3. Delete from Google Calendar (if a Google Event exists)
+    // 2. Delete from Google Calendar
     if (event.googleEventId) {
       try {
         const auth = new google.auth.JWT({
@@ -373,63 +397,49 @@ app.delete("/calendar-events/:id", authenticate, async (req, res) => {
         });
         const calendar = google.calendar({ version: 'v3', auth });
 
+        // If it has an underscore, Google will safely delete ONLY that instance!
         await calendar.events.delete({
           calendarId: process.env.GOOGLE_CALENDAR_ID,
-          eventId: event.googleEventId,
+          eventId: eventId,
           sendUpdates: 'all'
         });
       } catch (googleErr) {
-        console.log("Note: Event already removed from Google Workspace or inaccessible.");
+        console.log("Note: Event already removed from Google Workspace.");
       }
     }
 
-    // 4. Permanently delete from MongoDB
-    await Event.findByIdAndDelete(eventId);
-
-    const currentGuests = event.guests || [];
-    if (currentGuests.length > 0) {
-      const guestUsers = await User.find({ username: { $in: currentGuests } });
-      
-      for (const guest of guestUsers) {
-        await sendAutoNotification(
-          req.app,
-          guest._id,
-          `❌ Class Cancelled: "${event.title}" has been removed from the schedule.`,
-          "schedule",
-          req.user.username
-        );
-      }
+    // 3. Delete from MongoDB ONLY if it's not a recurring instance
+    if (!isInstance) {
+      await Event.findByIdAndDelete(event._id);
     }
 
-    lastFetchTime = 0; // Force refresh cache on next fetch
-    
-    res.status(200).json({ message: "Event successfully deleted from Database and Google Calendar." });
-
+    lastFetchTime = 0; // Force cache refresh
+    res.status(200).json({ message: "Event successfully deleted." });
   } catch (error) {
-    console.error("Delete operation failed:", error);
     res.status(500).json({ error: "Server error deleting event" });
   }
 });
 
-// --- EDIT EVENT ---
+// --- EDIT EVENT (SUPPORTS RECURRING INSTANCES) ---
 app.put("/calendar-events/:id", authenticate, async (req, res) => {
   try {
     const eventId = req.params.id;
+    const isInstance = eventId.includes('_');
+    const baseGoogleId = isInstance ? eventId.split('_')[0] : eventId;
     const { title, date, type, color, reminderMinutes, guests } = req.body;
 
-    // 1. Find the event in MongoDB
-    const event = await Event.findById(eventId);
+    let event = null;
+    try { event = await Event.findById(eventId); } catch(err) {}
+    if (!event) event = await Event.findOne({ googleEventId: baseGoogleId });
     if (!event) return res.status(404).json({ error: "Event not found." });
 
-    // 2. Security Check: Only the creator can edit
     if (!event.user || event.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ error: "Unauthorized: You can only edit your own events." });
+      return res.status(403).json({ error: "Unauthorized." });
     }
 
-    const updatedDate = new Date(date); // Parsed from frontend ISO string
-    const endDate = new Date(updatedDate.getTime() + 60 * 60 * 1000); // Default to 1 hour duration
+    const updatedDate = new Date(date);
+    const endDate = new Date(updatedDate.getTime() + 60 * 60 * 1000); 
 
-    // 3. Update Google Calendar (if a Google Event exists)
     if (event.googleEventId) {
       try {
         const auth = new google.auth.JWT({
@@ -440,53 +450,35 @@ app.put("/calendar-events/:id", authenticate, async (req, res) => {
         });
         const calendar = google.calendar({ version: 'v3', auth });
 
-        // Using patch so we don't accidentally wipe out the Meet link or attachments
         await calendar.events.patch({
           calendarId: process.env.GOOGLE_CALENDAR_ID,
-          eventId: event.googleEventId,
+          eventId: eventId, // Passing the instance ID modifies only that instance
           sendUpdates: 'all',
           requestBody: {
             summary: title,
             start: { dateTime: updatedDate.toISOString() },
             end: { dateTime: endDate.toISOString() }
-            // Note: We don't update attendees here yet unless you specifically want to sync guests to Google
           }
         });
       } catch (googleErr) {
         console.error("Google sync failed during edit:", googleErr.message);
-        // We continue anyway so the local DB at least gets updated
       }
     }
 
-    // 4. Update Local MongoDB
-    event.title = title || event.title;
-    event.date = updatedDate;
-    if (type) event.type = type;
-    if (color) event.color = color;
-    if (reminderMinutes !== undefined) event.reminderMinutes = reminderMinutes;
-    if (guests !== undefined) event.guests = guests;
-
-    await event.save();
-
-    const currentGuests = event.guests || [];
-    if (currentGuests.length > 0) {
-      const guestUsers = await User.find({ username: { $in: currentGuests } });
-      
-      for (const guest of guestUsers) {
-        await sendAutoNotification(
-          req.app,
-          guest._id,
-          `✏️ Class Updated: Details for "${event.title}" have changed.`,
-          "schedule",
-          req.user.username
-        );
-      }
+    // Only update the MongoDB master date if it is NOT an instance
+    if (!isInstance) {
+      event.title = title || event.title;
+      event.date = updatedDate;
+      if (type) event.type = type;
+      if (color) event.color = color;
+      if (reminderMinutes !== undefined) event.reminderMinutes = reminderMinutes;
+      if (guests !== undefined) event.guests = guests;
+      await event.save();
     }
 
+    lastFetchTime = 0; // Force cache refresh
     res.status(200).json({ message: "Event successfully updated.", event });
-
   } catch (error) {
-    console.error("Edit operation failed:", error);
     res.status(500).json({ error: "Server error updating event" });
   }
 });
@@ -507,7 +499,6 @@ app.get("/auth/google", (req, res) => {
   });
   res.redirect(url);
 });
-
 // ==========================================
 // CREATE NEW EVENT (Hybrid: MongoDB + Google Calendar)
 // ==========================================
@@ -520,10 +511,12 @@ app.post("/calendar-events", authenticate, async (req, res) => {
     const eventDate = new Date(date);
     const eventEndDate = new Date(eventDate.getTime() + 60 * 60 * 1000); // 1 hour duration
 
-    // 1. Convert Usernames to Emails for Google
+    // 1. Fetch Guest Users ONCE for both Google Emails and Notifications
     const googleAttendees = [{ email: req.user.email }];
+    let guestUsers = [];
+    
     if (guests && guests.length > 0) {
-      const guestUsers = await User.find({ username: { $in: guests } });
+      guestUsers = await User.find({ username: { $in: guests } });
       guestUsers.forEach(user => {
         if (user.email.toLowerCase() !== req.user.email.toLowerCase()) {
           googleAttendees.push({ email: user.email.toLowerCase() });
@@ -551,12 +544,12 @@ app.post("/calendar-events", authenticate, async (req, res) => {
     });
     const calendar = google.calendar({ version: 'v3', auth });
 
-    // 4. Create in Google FIRST
+    // 4. Create in Google FIRST (Removed timeZone to prevent UTC 'Z' conflicts)
     const googleEventReq = {
       summary: `[${type.toUpperCase()}] ${title}`,
       description: description || `Created via Platform by @${req.user.username || 'User'}`,
-      start: { dateTime: eventDate.toISOString(), timeZone: 'Asia/Kolkata' },
-      end: { dateTime: eventEndDate.toISOString(), timeZone: 'Asia/Kolkata' },
+      start: { dateTime: eventDate.toISOString() }, 
+      end: { dateTime: eventEndDate.toISOString() },
       attendees: googleAttendees,
       conferenceData: conferenceData 
     };
@@ -568,46 +561,44 @@ app.post("/calendar-events", authenticate, async (req, res) => {
       conferenceDataVersion: 1 
     });
 
-    // 5. NOW save to MongoDB, including all the generated Google links!
+    // 5. NOW save to MongoDB, including description and all generated links
     const newEvent = new Event({
       title, 
       date: eventDate, 
       type, 
       color, 
       reminderMinutes, 
+      description, // 🚨 Added description here
       user: req.user._id,
-      googleEventId: googleRes.data.id,               // 🚨 Saved for deleting later
-      meetLink: googleRes.data.hangoutLink || null,   // 🚨 The Google Meet Video URL
-      htmlLink: googleRes.data.htmlLink,              // 🚨 The Google Calendar URL
+      googleEventId: googleRes.data.id,               
+      meetLink: googleRes.data.hangoutLink || null,   
+      htmlLink: googleRes.data.htmlLink,              
       guests: guests || []
     });
 
     await newEvent.save();
 
-    if (guests && guests.length > 0) {
-      const guestUsers = await User.find({ username: { $in: guests } });
-      
-      // 3. Send your custom system notification to every guest!
+    // 6. Send in-app system notifications (Re-using the guestUsers array)
+    if (guestUsers.length > 0) {
       for (const guest of guestUsers) {
         await sendAutoNotification(
-          req.app,               // Socket.io instance
-          guest._id,             // Receiver's ID
-          `📅 New Class: You've been scheduled for "${title}"`, // Message
-          "schedule",            // The view link (your sw.js will parse this perfectly!)
-          req.user.username      // Audit: Who created it
+          req.app,               
+          guest._id,             
+          `📅 New Event: You've been scheduled for "${title}"`, 
+          "schedule",            
+          req.user.username      
         );
       }
     }
 
-    lastFetchTime = 0;
+    lastFetchTime = 0; // Invalidate cache
     res.status(201).json(newEvent);
 
   } catch (error) {
     console.error("Failed to save event:", error);
     res.status(500).json({ error: "Server error creating event" });
   }
-});
-// 🚨 Ensure sendAutoNotification and transporter are imported at the top!
+});// 🚨 Ensure sendAutoNotification and transporter are imported at the top!
 
 app.get("/auth/google/callback", async (req, res) => {
   const code = req.query.code;
@@ -1046,10 +1037,22 @@ app.get("/users", authenticate, async (req, res) => {
       return res.status(403).json({ error: "Access denied. Admins only." });
     }
 
-    // Find all users but exclude passwords for security
-    const allUsers = await User.find({}).select("-password");
+    // 1. Fetch all users (using .lean() makes it a plain JS object, easy to edit)
+    const allUsers = await User.find({}).select("-password").lean();
     
-    res.status(200).json(allUsers);
+    // 2. Fetch all active counselors
+    const activeCounselors = await Counselor.find({ isActive: true }).select("user").lean();
+    
+    // 3. Create a quick Set of counselor User IDs for instant lookup
+    const counselorUserIds = new Set(activeCounselors.map(c => c.user.toString()));
+
+    // 4. Stitch 'isCounselor' onto the users before sending to React!
+    const usersWithCounselorStatus = allUsers.map(user => ({
+      ...user,
+      isCounselor: counselorUserIds.has(user._id.toString())
+    }));
+    
+    res.status(200).json(usersWithCounselorStatus);
   } catch (error) {
     console.error("Error fetching users:", error);
     res.status(500).json({ error: "Internal server error while fetching users." });

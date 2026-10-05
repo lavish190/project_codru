@@ -29,6 +29,7 @@ import FinalBuy from "./components/FinalBuy";
 import PaymentHistory from "./components/PaymentHistory";
 import PaymentStatus from "./components/PaymentStatus";
 import EnrollPage from "./components/Enrol";
+import AdmissionPortal from "./components/Admission/AdmissionPortal";
 
 // --- TYPESCRIPT DEFINITIONS ---
 export interface UserData {
@@ -43,6 +44,7 @@ export interface UserData {
   parentVerificationRequested: boolean;
   dashboardLayout?: any[];
   isCuTeTeam?: boolean;
+  isCounselor?: boolean;
 }
 
 // Helper for Web Push VAPID keys
@@ -79,7 +81,8 @@ function App() {
       isVerifiedParent: false,
       parentVerificationRequested: false,
       dashboardLayout: [],
-      isCuTeTeam: false
+      isCuTeTeam: false,
+      isCounselor: false
     });
 
   const [isAuthLoading, setIsAuthLoading] =
@@ -334,6 +337,8 @@ function App() {
                 data.user.dashboardLayout || [],
               isCuTeTeam:
                 data.user.isCuTeTeam || false,
+              isCounselor: 
+                data.user.isCounselor || false,
             });
 
             setIsServerVerified(true);
@@ -644,6 +649,15 @@ function App() {
             <Route 
               path="/plan-details/:id" 
               element={<PlanViewer />} 
+            />
+
+            <Route
+              path="//homeschool-application"
+              element={
+                
+                  <AdmissionPortal />
+            
+              }
             />
 
             {/* NOT FOUND */}

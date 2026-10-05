@@ -13,6 +13,7 @@ router.use(bodyParser.json());
 router.use(express.urlencoded({ extended: true }));
 router.use(cookieParser());
 const User = require("../models/userSchema");
+const Counselor = require("../models/counselorSchema"); 
 const OTP = require("../models/otpSchema");
 const Syllabus = require("../models/syllabusSchema");
 const authenticate = require("../middleware/authenticate");
@@ -22,6 +23,7 @@ const actionTemplate = require("../utils/actionTemplate"); // Ensure this path i
 const sendAutoNotification = require("../utils/notify");
 const welcomeTemplate = require("../utils/welcomeTemplate"); // For consistent welcome emails
 const transporter = require('../utils/transporter'); // Adjust the path if needed
+const Admission = require("../models/Admission");
 
 // ==========================================
 // UPDATE SYLLABUS PROGRESS (Checkmark or Doubt)
@@ -899,8 +901,8 @@ router.post("/generate-otp", async (req, res) => {
   }
 });
 
-/// ==========================================
-// 2. VERIFY OTP ROUTE (Signup Proof)
+// ==========================================
+// 2. VERIFY OTP ROUTE (Signup Proof & Smart Hydration)
 // ==========================================
 router.post("/verify-email", async (req, res) => {
   try {
@@ -923,7 +925,28 @@ router.post("/verify-email", async (req, res) => {
       // Success! Delete it so it can't be used twice
       await OTP.deleteMany({ email: cleanEmail });
 
-      res.status(200).send({ message: "Verification successful" });
+      // 🚨 3. SMART HYDRATION: Check if this user already exists in the system
+      const existingUser = await User.findOne({ email: cleanEmail });
+
+      if (existingUser) {
+        // Send back the existing data to pre-fill the frontend form
+        res.status(200).send({ 
+          message: "Verification successful",
+          existingUser: true,
+          user: {
+            name: existingUser.name,
+            username: existingUser.username,
+            dob: existingUser.dob
+          }
+        });
+      } else {
+        // Normal flow for a brand new user
+        res.status(200).send({ 
+          message: "Verification successful",
+          existingUser: false 
+        });
+      }
+
     } else {
       res.status(401).send({ error: "Invalid OTP" });
     }
@@ -1004,15 +1027,24 @@ router.post("/profile-edit", async (req, res) => {
 });
 
 // Profile retrieval route
-router.get("/profile",authenticate,async (req, res) => {
+router.get("/profile", authenticate, async (req, res) => {
   try {
     const username = req.username; // Get username from authenticated user
+    
+    // 🚨 Added .lean() here so we can attach 'isCounselor' easily
     let user = await User.findById(req.userId).populate({
       path: "posts followers following", 
-    });
+    }).lean(); 
+
     if (!user) {
       return res.status(400).json({ error: "User not found" });
     }
+
+    // 🚨 NEW: Check the Counselor database
+    const counselorProfile = await Counselor.findOne({ user: user._id, isActive: true });
+    
+    // 🚨 NEW: Attach the result before sending
+    user.isCounselor = !!counselorProfile;
 
     res.status(200).json({ message: "Profile retrieved", user });
   } catch (error) {
@@ -1539,5 +1571,6 @@ router.get("/admin/audit-log", authenticate, async (req, res) => {
     res.status(500).json({ error: "Failed to generate audit log" });
   }
 });
+
 
 module.exports = router;

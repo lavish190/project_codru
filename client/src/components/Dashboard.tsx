@@ -20,7 +20,8 @@ import {
   UserCircle,
   Zap,
   Plus,
-  Mail
+  Mail,
+  CalendarDays
 } from "lucide-react";
 
 // Components
@@ -47,6 +48,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import Navprofile from "./Navprofile";
 import Overview from './Overview';
 import AdminInternship from "./AdminInternship";
+import CounselorSchedule from "./CounselorSchedule"; 
+import CounselorAdmissionsDesk from "./CounselorAdmissionsDesk";
 
 interface DashboardProps {
   userData: UserData;
@@ -80,6 +83,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
   const isParent = userData.Role === "Parent"; 
   const isVerifiedParent = isParent && userData.isVerifiedParent;
   const isUnverifiedParent = isParent && !userData.isVerifiedParent;
+  const isCounselor = userData?.isCounselor;
   
   // Global State for Teachers to select a student
   const [teacherStudents, setTeacherStudents] = useState<any[]>([]);
@@ -102,6 +106,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
       report: "Report", management: "Management", "my-courses": "My Courses",
       "the-village": "The Village (Q&A)", "expert-connect": "Expert Connect",
       "whatsapp-crm": "WhatsApp Support","BulkEmails":"BulkEmails", "admin-internship":"Internship Management",
+      "counselor-schedule": "My Schedule", "admissions-desk": "Admissions Desk",
     };
     return viewToTabMap[currentView] || "Overview";
   });
@@ -191,7 +196,8 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         "whatsapp-crm": "WhatsApp Support",
         "crm": "Management" ,
         "BulkEmails": "Bulk Emails",
-        "admin-internship": "Internship Management"
+        "admin-internship": "Internship Management",
+        "admissions-desk": "Admissions Desk"
       };
 
       setActiveTab(viewToTabMap[target] || "Dashboard"); 
@@ -354,6 +360,12 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
       parentItems.push({ text: "Expert Connect", icon: <MessageCircle size={22} />, view: "expert-connect", isLocked: isUnverifiedParent });
     }
 
+    const counselorItems = [];
+    if (isCounselor) {
+      counselorItems.push({ text: "My Schedule", icon: <CalendarDays size={22} />, view: "counselor-schedule" });
+      counselorItems.push({ text: "Admissions Desk", icon: <Users size={22} />, view: "admissions-desk" });
+    }
+
     const adminItems = [];
     if (userData.isAdmin) {
       adminItems.push({ text: "Management", icon: <Briefcase size={22} />, view: "crm" });
@@ -443,6 +455,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         {/* Category Headers */}
         {renderGroup("Guidance & Support", parentItems, "text-rose-400")}
         {renderGroup("Academy Tools", premiumItems, "text-slate-400")}
+        {renderGroup("Counselor Tools", counselorItems, "text-[#ed7f23]")}
         {renderGroup("Admin Tools", adminItems, "text-brand-blue")}
         
         {/* Unverified Teacher Banner */}
@@ -698,11 +711,11 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
               rounded-t-4xl md:rounded-4xl 
               border-t md:border border-gray-100 border-x-0 md:border-x
               shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] md:shadow-xl
-              ${(currentView === "report" || currentView === "whatsapp-crm") 
+              ${(currentView === "report" || currentView === "whatsapp-crm" || currentView === "schedule") 
                   ? "p-0 overflow-hidden" 
                   : "pt-4 px-4 md:pt-6 md:px-6 overflow-y-auto dashboard-content-scroll"}
           `}>
-            <div className={`relative w-full ${(currentView === "report" || currentView === "whatsapp-crm") 
+            <div className={`relative w-full ${(currentView === "report" || currentView === "whatsapp-crm" || currentView === "schedule") 
               ? "h-full" 
               : "min-h-full pb-8 md:pb-10"} rounded-lg
             `}>
@@ -714,7 +727,8 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
               {currentView === "settings" && <SettingsPanel userData={userData} setUserData={setUserData} />}
               {currentView === "saved-posts" && <SavedPosts />}
               {currentView === "my-posts" && <MyPosts />}
-              
+              {currentView === "counselor-schedule" && isCounselor && <CounselorSchedule />} {/* 🚨 NEW COMPONENT INJECTED */}
+              {currentView === "admissions-desk" && isCounselor && <CounselorAdmissionsDesk userData={userData} />}
               {currentView === "syllabus" && !isParent && <SyllabusTracker role={userData.Role || "student"} selectedStudentUsername={selectedStudentUsername} />}
               {currentView === "my-courses" && !isParent && <MyCourses role={userData.Role} selectedStudentUsername={selectedStudentUsername || undefined} />}
               {currentView === "report" && userData?.Role?.toLowerCase() === "student" && <PlanetryPath />}

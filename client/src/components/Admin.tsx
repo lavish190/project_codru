@@ -15,7 +15,8 @@ import {
   Block as BlockIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
-  WorkspacePremium as WorkspacePremiumIcon
+  WorkspacePremium as WorkspacePremiumIcon,
+  SupportAgent as SupportAgentIcon
 } from "@mui/icons-material";
 import { Dialog, DialogContent, IconButton, TextField, Button, Tooltip, Switch, FormControlLabel, InputAdornment } from "@mui/material";
 
@@ -354,6 +355,26 @@ function Admin() {
     }
   };
 
+  const handleToggleCounselor = async (username: string) => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API}api/admin/toggle-counselor/${username}`, {
+        method: "PUT", headers: { "Authorization": `Bearer ${localStorage.getItem("jwtoken")}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAlertSeverity("success");
+        setAlertMessage(data.message);
+        setShowAlert(true);
+        // Instantly update the UI without reloading
+        setUsers(prev => prev.map(u => u.username === username ? { ...u, isCounselor: data.isCounselor } : u));
+      }
+    } catch (err) {
+      setAlertSeverity("error");
+      setAlertMessage("Counselor toggle failed.");
+      setShowAlert(true);
+    }
+  };
+
   const handleToggleBan = async (username: string) => {
     try {
       const res = await fetch(`${import.meta.env.VITE_API}user/toggle-ban/${username}`, {
@@ -516,6 +537,7 @@ function Admin() {
   },
     { field: "isAdmin", headerName: "Admin", width: 80, renderCell: (params) => params.value ? <ShieldIcon sx={{ fontSize: 18, color: '#10b981' }} /> : <span className="text-xs text-gray-300">NO</span> },
     { field: "isCuTeTeam", headerName: "Team", width: 80, renderCell: (params) => (<span className={`text-[10px] font-bold ${params.value ? 'text-brand-blue' : 'text-slate-300'}`}>{params.value ? "YES" : "NO"}</span>) },
+   { field: "isCounselor", headerName: "Counselor", width: 90, renderCell: (params) => (<span className={`text-[10px] font-bold ${params.value ? 'text-[#ed7f23]' : 'text-slate-300'}`}>{params.value ? "YES" : "NO"}</span>) },
     { field: "isBanned", headerName: "Banned", width: 80, renderCell: (params) => (<span className={`text-[10px] font-bold ${params.value ? 'text-red-600' : 'text-green-600'}`}>{params.value ? "YES" : "NO"}</span>) },
     {
       field: "actions",
@@ -529,6 +551,7 @@ function Admin() {
           )}
           <Tooltip title="Toggle Team Status"><IconButton onClick={() => handleToggleTeam(params.row.username)} size="small" sx={{ color: params.row.isCuTeTeam ? '#1765a4' : '#cbd5e1' }}><WorkspacePremiumIcon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Toggle Ban"><IconButton onClick={() => handleToggleBan(params.row.username)} size="small" sx={{ color: params.row.isBanned ? '#10b981' : '#ef4444' }}><BlockIcon fontSize="small" /></IconButton></Tooltip>
+          <Tooltip title="Toggle Counselor"><IconButton onClick={() => handleToggleCounselor(params.row.username)} size="small" sx={{ color: params.row.isCounselor ? '#ed7f23' : '#cbd5e1' }}><SupportAgentIcon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Toggle Admin"><IconButton onClick={() => handleAdminToggleRequest(params.row.username, params.row.isAdmin)} size="small" color={params.row.isAdmin ? "warning" : "success"}>{params.row.isAdmin ? <RemoveCircleIcon fontSize="small" /> : <AddCircleIcon fontSize="small" />}</IconButton></Tooltip>
           <Tooltip title="Delete User"><IconButton onClick={() => handleDelete(params.row.id, params.row.username)} size="small" color="error"><DeleteIcon fontSize="small" /></IconButton></Tooltip>
         </div>
