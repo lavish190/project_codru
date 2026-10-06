@@ -1,0 +1,31 @@
+name: Deploy Node.js Backend
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute Deployment Commands on Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /root/project_codru
+            
+            # Force server to exactly match GitHub
+            git fetch origin
+            git reset --hard origin/main
+            
+            # Navigate into the server folder before running Docker
+            cd server
+            
+            # Rebuild and start the container
+            docker compose up -d --build
+            
+            # Clean up old images
+            docker image prune -f
