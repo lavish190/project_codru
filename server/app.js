@@ -67,18 +67,27 @@ const allowedOrigins = [
   "https://www.curiousteamlearning.com",   // 🚨 ADD THIS: Your www domain
   "http://localhost:5173",                 // React local dev
   "http://localhost:8788" 
-];
+].filter(Boolean); // Remove any undefined or empty values
 
 // 2. The Smart CORS Configuration
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, origin); // Dynamically echoes the exact frontend URL back!
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Normalize incoming origin (remove trailing slash if any)
+    const normalizedOrigin = origin.replace(/\/$/, "");
+
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      callback(null, true); // Safely allow
     } else {
-      callback(new Error("Not allowed by CORS"));
+      console.log(`[CORS Blocked]: ${origin}`);
+      callback(null, false); // Gracefully reject without throwing 500 error
     }
   },
-  credentials: true, // Now this is 100% legal and secure
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
 }));
 app.use(express.json());
 
