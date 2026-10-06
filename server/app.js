@@ -69,25 +69,28 @@ const allowedOrigins = [
   "http://localhost:8788" 
 ].filter(Boolean); // Remove any undefined or empty values
 
-// 2. The Smart CORS Configuration
+// 1. THE WIRETAP: Log every incoming request before CORS touches it
+app.use((req, res, next) => {
+  console.log(`\n--- NEW REQUEST ---`);
+  console.log(`Method/URL: ${req.method} ${req.url}`);
+  console.log(`Origin Header: ${req.headers.origin}`);
+  console.log(`Host Header: ${req.headers.host}`);
+  next();
+});
+
+// 2. Modify your CORS config to print the exact evaluation
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // Normalize incoming origin (remove trailing slash if any)
-    const normalizedOrigin = origin.replace(/\/$/, "");
-
-    if (allowedOrigins.includes(normalizedOrigin)) {
-      callback(null, true); // Safely allow
+    console.log(`[CORS EVALUATION] Checking origin: ${origin}`);
+    if (!origin || allowedOrigins.includes(origin)) {
+      console.log(`[CORS SUCCESS] Allowed!`);
+      callback(null, true);
     } else {
-      console.log(`[CORS Blocked]: ${origin}`);
-      callback(null, false); // Gracefully reject without throwing 500 error
+      console.log(`[CORS REJECTED] Origin not found in allowed list.`);
+      callback(null, false);
     }
   },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+  credentials: true
 }));
 app.use(express.json());
 
