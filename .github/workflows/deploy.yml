@@ -17,8 +17,9 @@ jobs:
           script: |
             cd /root/project_codru
             
-            # Pull the latest code
-            git pull origin main
+            # Force server to exactly match GitHub
+            git fetch origin
+            git reset --hard origin/main
             
             # Navigate into the server folder before running Docker
             cd server
