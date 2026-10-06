@@ -17,8 +17,14 @@ jobs:
           script: |
             cd /root/project_codru
             
+            # Pull the latest code
             git pull origin main
             
+            # Navigate into the server folder before running Docker
+            cd server
+            
+            # Rebuild and start the container
             docker compose up -d --build
             
+            # Clean up old images
             docker image prune -f
