@@ -1029,28 +1029,54 @@ router.post("/profile-edit", async (req, res) => {
 // Profile retrieval route
 router.get("/profile", authenticate, async (req, res) => {
   try {
-    const username = req.username; // Get username from authenticated user
-    
-    // 🚨 Added .lean() here so we can attach 'isCounselor' easily
-    let user = await User.findById(req.userId).populate({
+    const user = await User.findById(req.userId).populate({
       path: "posts followers following", 
     }).lean(); 
 
-    if (!user) {
-      return res.status(400).json({ error: "User not found" });
-    }
+    if (!user) return res.status(400).json({ error: "User not found" });
 
-    // 🚨 NEW: Check the Counselor database
     const counselorProfile = await Counselor.findOne({ user: user._id, isActive: true });
-    
-    // 🚨 NEW: Attach the result before sending
     user.isCounselor = !!counselorProfile;
 
-    res.status(200).json({ message: "Profile retrieved", user });
-  } catch (error) {
-    if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({ error: "Invalid token" });
+    // ==========================================
+    // 🛡️ SMART TOKEN RENEWAL
+    // ==========================================
+    // req.exp is the expiration timestamp (in seconds) attached by your authenticate middleware
+    const currentTime = Math.floor(Date.now() / 1000);
+    const timeLeft = req.exp - currentTime; // How many seconds left on the token?
+    
+    const sevenDaysInSeconds = 7 * 24 * 60 * 60;
+
+    let newToken = null;
+
+    // ONLY generate a new token if the current one has less than 7 days left!
+    if (timeLeft < sevenDaysInSeconds) {
+      console.log(`[AUTH] Token running low (${Math.round(timeLeft/86400)} days left). Issuing renewal for ${user.username}`);
+      
+      newToken = jwt.sign(
+        { _id: user._id, username: user.username, role: user.role, isAdmin: user.isAdmin },
+        process.env.TOKEN_SECRET,
+        { expiresIn: "14d" }
+      );
+
+      const cookieExpire = process.env.COOKIEEXPIRE ? Number(process.env.COOKIEEXPIRE) : (14 * 24 * 60 * 60 * 1000);
+      res.cookie("token", newToken, {
+        expires: new Date(Date.now() + cookieExpire), 
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production", 
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
+      });
     }
+
+    // Send profile data (and newToken ONLY if it was generated)
+    res.status(200).json({ 
+      message: "Profile retrieved", 
+      user,
+      newToken 
+    });
+
+  } catch (error) {
+    if (error.name === "JsonWebTokenError") return res.status(401).json({ error: "Invalid token" });
     res.status(500).json({ error: "Internal server error" });
   }
 });

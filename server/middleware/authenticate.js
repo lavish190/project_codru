@@ -13,8 +13,10 @@ const authenticate = async (req, res, next) => {
 
     const token = authHeader.split(" ")[1];
     console.log("Token received:", token);
+    
     const verified = jwt.verify(token, process.env.TOKEN_SECRET);
     console.log("Verified Token:", verified);
+    
     const user = await User.findOne({ _id: verified._id });
 
     if (!user) {
@@ -27,6 +29,7 @@ const authenticate = async (req, res, next) => {
     req.userID = user._id; // For all your previous code
     req.username = user.username;
     req.email = user.email;
+    req.exp = verified.exp; 
 
     next();
   } catch (err) {

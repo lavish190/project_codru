@@ -277,85 +277,68 @@ function App() {
       if (activeToken) {
 
         try {
-
           const res = await fetch(
             `${import.meta.env.VITE_API}profile`,
             {
               method: "GET",
               headers: {
-                "Content-Type":
-                  "application/json",
-                "Authorization":
-                  `Bearer ${activeToken}`
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${activeToken}`
               }
             }
           );
 
+          // 🚨 Intercept expired/invalid tokens and auto-logout!
+          if (res.status === 401) {
+            console.warn("Token expired. Auto-logging out...");
+            localStorage.removeItem("jwtoken");
+            localStorage.removeItem("Username");
+            localStorage.removeItem("userId");
+            localStorage.removeItem("Photo");
+            localStorage.removeItem("Name");
+            
+            // Redirect to signin smoothly
+            window.location.href = "/signin";
+            return;
+          }
+
           const data = await res.json();
 
           if (res.ok && data.user) {
+            // ==========================================
+            // 🚨 SMART RENEWAL: Save the new token if backend provided one
+            // ==========================================
+            if (data.newToken) {
+              console.log("Session automatically extended for 14 days.");
+              localStorage.setItem("jwtoken", data.newToken);
+            }
 
-            localStorage.setItem(
-              "Username",
-              data.user.username
-            );
-
-            localStorage.setItem(
-              "userId",
-              data.user._id
-            );
-
-            localStorage.setItem(
-              "Photo",
-              data.user.photo || ""
-            );
-
-            localStorage.setItem(
-              "Name",
-              data.user.name || ""
-            );
+            localStorage.setItem("Username", data.user.username);
+            localStorage.setItem("userId", data.user._id);
+            localStorage.setItem("Photo", data.user.photo || "");
+            localStorage.setItem("Name", data.user.name || "");
 
             setUserData({
               _id: data.user._id,
-              Photo:
-                data.user.photo?.toString() || "",
-              Name:
-                data.user.name?.toString() || "",
-              Role:
-                data.user.role?.toString() || "",
-              isAdmin:
-                data.user.isAdmin || false,
-              isVerifiedStaff:
-                data.user.isVerifiedStaff || false,
-              staffApprovalRequested:
-                data.user.staffApprovalRequested || false,
-              isVerifiedParent:
-                data.user.isVerifiedParent || false,
-              parentVerificationRequested:
-                data.user.parentVerificationRequested || false,
-              dashboardLayout:
-                data.user.dashboardLayout || [],
-              isCuTeTeam:
-                data.user.isCuTeTeam || false,
-              isCounselor: 
-                data.user.isCounselor || false,
+              Photo: data.user.photo?.toString() || "",
+              Name: data.user.name?.toString() || "",
+              Role: data.user.role?.toString() || "",
+              isAdmin: data.user.isAdmin || false,
+              isVerifiedStaff: data.user.isVerifiedStaff || false,
+              staffApprovalRequested: data.user.staffApprovalRequested || false,
+              isVerifiedParent: data.user.isVerifiedParent || false,
+              parentVerificationRequested: data.user.parentVerificationRequested || false,
+              dashboardLayout: data.user.dashboardLayout || [],
+              isCuTeTeam: data.user.isCuTeTeam || false,
+              isCounselor: data.user.isCounselor || false,
             });
 
             setIsServerVerified(true);
-
           }
-
         } catch (error) {
-
-          console.error(
-            "Network error fetching user profile:",
-            error
-          );
-
+          console.error("Network error fetching user profile:", error);
         } finally {
-
           setIsAuthLoading(false);
-
         }
 
       } else {
