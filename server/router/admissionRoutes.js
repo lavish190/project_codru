@@ -61,6 +61,36 @@ router.get("/api/counselor/schedule", authenticate, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch schedule." });
   }
 });
+
+// ==========================================
+// COUNSELOR: UPDATE OWN SCHEDULE & AVAILABILITY
+// ==========================================
+router.put("/api/counselor/schedule", authenticate, async (req, res) => {
+  try {
+    const { timeZone, baseAvailability, dateOverrides } = req.body;
+
+    const counselor = await Counselor.findOne({ user: req.user._id });
+    if (!counselor) {
+      return res.status(403).json({ error: "Not a counselor." });
+    }
+
+    // Update availability fields
+    if (timeZone !== undefined) counselor.timeZone = timeZone;
+    if (baseAvailability !== undefined) counselor.baseAvailability = baseAvailability;
+    if (dateOverrides !== undefined) counselor.dateOverrides = dateOverrides;
+
+    await counselor.save();
+
+    res.status(200).json({ 
+      message: "Schedule updated successfully!", 
+      counselor 
+    });
+  } catch (error) {
+    console.error("Schedule update error:", error);
+    res.status(500).json({ error: "Failed to update schedule." });
+  }
+});
+
 // ==========================================
 // 2. PUBLIC: GET ALL AVAILABLE SLOTS (SMART FILTER)
 // ==========================================
@@ -510,7 +540,8 @@ router.get("/api/my-admission-progress", authenticate, async (req, res) => {
       stage2_Assessment: admission.stage2_Assessment || null,
       stage3_Recommendation: admission.stage3_Recommendation || null,
       stage4_ClassesBegin: admission.stage4_ClassesBegin || null,
-      stage5_Confirmation: admission.stage5_Confirmation || null
+      stage5_Confirmation: admission.stage5_Confirmation || null,
+      stage6_Observation: admission.stage6_Observation || null
     });
 
   } catch (error) {
@@ -1044,45 +1075,6 @@ router.post("/api/assessment/upload-test-answers", authenticate, upload.array("f
   }
 });
 
-
-// ==========================================
-// COUNSELOR: SAVE NOTES & ADVANCE TO STAGE 3
-// ==========================================
-router.post("/api/counselor/complete-stage2", authenticate, async (req, res) => {
-  try {
-    const { admissionId, teacherBaselineNotes, recommendedTrack } = req.body;
-
-    // 1. Save Evaluation Notes to Assessment
-    const assessment = await Assessment.findOneAndUpdate(
-      { admission: admissionId },
-      { 
-        $set: { 
-          "liveTest.teacherBaselineNotes": teacherBaselineNotes,
-          "liveTest.status": "completed"
-        } 
-      },
-      { new: true }
-    );
-
-    // 2. Advance Admission Stage to 3!
-    const admission = await Admission.findByIdAndUpdate(
-      admissionId,
-      {
-        $set: {
-          admissionStage: 3,
-          "stage2_Assessment.status": "completed",
-          "stage3_Recommendation.recommendedPathway": recommendedTrack
-        }
-      },
-      { new: true }
-    );
-
-    res.status(200).json({ message: "Stage 2 completed! Student moved to Stage 3.", admission });
-  } catch (error) {
-    console.error("Complete Stage 2 Error:", error);
-    res.status(500).json({ error: "Failed to complete Stage 2." });
-  }
-});
 
 /// ==========================================
 // COUNSELOR: FETCH FULL STUDENT DOSSIER
