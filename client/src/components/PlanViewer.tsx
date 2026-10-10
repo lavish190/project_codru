@@ -6,7 +6,6 @@ import { Document, Page, pdfjs } from "react-pdf";
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
-// Load worker locally via Vite
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
@@ -115,32 +114,36 @@ const PlanViewer = () => {
 
   return (
     <div 
-      className="relative flex flex-col flex-grow w-full bg-[#e2e8f0] overflow-hidden" 
-      style={{ height: 'calc(100vh - 64px)' }} 
+      className="relative flex flex-col w-full h-full min-h-screen bg-[#e2e8f0]" 
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* 🚨 CUSTOM SCROLLBAR STYLES INJECTED HERE */}
+      {/* 🚨 FORCED VISIBLE SCROLLBAR CSS */}
       <style>
         {`
+          #pdf-scroll-container {
+            scrollbar-width: thin;
+            scrollbar-color: #1765a4 #cbd5e1;
+          }
           #pdf-scroll-container::-webkit-scrollbar {
-            width: 14px;
+            width: 12px !important;
+            display: block !important;
           }
           #pdf-scroll-container::-webkit-scrollbar-track {
-            background: #e2e8f0;
-            border-left: 1px solid #cbd5e1;
+            background: #cbd5e1 !important;
           }
           #pdf-scroll-container::-webkit-scrollbar-thumb {
-            background-color: #94a3b8;
-            border-radius: 10px;
-            border: 3px solid #e2e8f0; /* Creates a padded effect */
+            background-color: #1765a4 !important;
+            border-radius: 6px !important;
+            border: 2px solid #cbd5e1 !important;
           }
           #pdf-scroll-container::-webkit-scrollbar-thumb:hover {
-            background-color: #64748b;
+            background-color: #ed7f23 !important;
           }
         `}
       </style>
       
-      <div className={`absolute top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 px-6 py-4 flex items-center justify-between z-40 transition-transform duration-300 ease-in-out ${showNav ? 'translate-y-0' : '-translate-y-full'}`}>
+      {/* HEADER */}
+      <div className={`fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 px-6 py-4 flex items-center justify-between z-40 transition-transform duration-300 ease-in-out ${showNav ? 'translate-y-0' : '-translate-y-full'}`}>
         <div className="flex items-center gap-3">
           <div className="bg-[#1765a4]/10 p-2 rounded-xl">
             <FileText className="w-6 h-6 text-[#1765a4]" />
@@ -159,7 +162,8 @@ const PlanViewer = () => {
         </div>
       </div>
 
-      <div className={`fixed bottom-[12dvh] right-6 md:bottom-8 md:right-10 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
+      {/* FLOATING ZOOM CONTROLS */}
+      <div className={`fixed bottom-8 right-8 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
         <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors border border-gray-200">
           <ZoomIn className="w-5 h-5" />
         </button>
@@ -171,9 +175,10 @@ const PlanViewer = () => {
         </button>
       </div>
 
+      {/* SCROLL CONTAINER */}
       <div 
         id="pdf-scroll-container"
-        className="flex-grow w-full h-full overflow-y-scroll pt-24 pb-32" /* 🚨 CHANGED TO overflow-y-scroll */
+        className="w-full h-screen overflow-y-scroll pt-24 pb-32"
         onScroll={handleScroll}
       >
         <div className="w-fit min-w-full mx-auto">
