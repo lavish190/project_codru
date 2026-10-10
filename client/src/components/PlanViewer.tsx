@@ -76,14 +76,13 @@ const PlanViewer = () => {
     setLastScrollY(currentScrollY);
   };
 
-  // 🚨 SMOOTH SCROLL FOR INTERNAL INDEX LINKS
   const handleInternalLinkClick = ({ pageNumber }) => {
     const targetPage = document.getElementById(`pdf-page-${pageNumber}`);
     const scrollContainer = document.getElementById('pdf-scroll-container');
     
     if (targetPage && scrollContainer) {
       scrollContainer.scrollTo({
-        top: targetPage.offsetTop - 100, // -100px so the top navbar doesn't hide the page!
+        top: targetPage.offsetTop - 100, 
         behavior: 'smooth'
       });
     }
@@ -118,8 +117,28 @@ const PlanViewer = () => {
     <div 
       className="relative flex flex-col flex-grow w-full bg-[#e2e8f0] overflow-hidden" 
       style={{ height: 'calc(100vh - 64px)' }} 
-      onContextMenu={(e) => e.preventDefault()} /* 🚨 RIGHT-CLICK PROTECTION RESTORED */
+      onContextMenu={(e) => e.preventDefault()}
     >
+      {/* 🚨 CUSTOM SCROLLBAR STYLES INJECTED HERE */}
+      <style>
+        {`
+          #pdf-scroll-container::-webkit-scrollbar {
+            width: 14px;
+          }
+          #pdf-scroll-container::-webkit-scrollbar-track {
+            background: #e2e8f0;
+            border-left: 1px solid #cbd5e1;
+          }
+          #pdf-scroll-container::-webkit-scrollbar-thumb {
+            background-color: #94a3b8;
+            border-radius: 10px;
+            border: 3px solid #e2e8f0; /* Creates a padded effect */
+          }
+          #pdf-scroll-container::-webkit-scrollbar-thumb:hover {
+            background-color: #64748b;
+          }
+        `}
+      </style>
       
       <div className={`absolute top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 px-6 py-4 flex items-center justify-between z-40 transition-transform duration-300 ease-in-out ${showNav ? 'translate-y-0' : '-translate-y-full'}`}>
         <div className="flex items-center gap-3">
@@ -140,21 +159,21 @@ const PlanViewer = () => {
         </div>
       </div>
 
-      <div className={`fixed bottom-[12dvh] right-4 md:bottom-8 md:right-8 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
-        <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
+      <div className={`fixed bottom-[12dvh] right-6 md:bottom-8 md:right-10 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showNav ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
+        <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors border border-gray-200">
           <ZoomIn className="w-5 h-5" />
         </button>
-        <button onClick={() => setZoom(1)} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
+        <button onClick={() => setZoom(1)} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors border border-gray-200">
           <Maximize className="w-5 h-5" />
         </button>
-        <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors">
+        <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} className="bg-white p-3 rounded-full shadow-xl text-[#1765a4] hover:bg-gray-50 transition-colors border border-gray-200">
           <ZoomOut className="w-5 h-5" />
         </button>
       </div>
 
       <div 
         id="pdf-scroll-container"
-        className="flex-grow w-full h-full overflow-auto pt-24 pb-32" 
+        className="flex-grow w-full h-full overflow-y-scroll pt-24 pb-32" /* 🚨 CHANGED TO overflow-y-scroll */
         onScroll={handleScroll}
       >
         <div className="w-fit min-w-full mx-auto">
@@ -163,7 +182,7 @@ const PlanViewer = () => {
             <Document
               file={securePdfUrl}
               onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-              onItemClick={handleInternalLinkClick} /* 🚨 WIRES UP INTERNAL INDEX LINKS */
+              onItemClick={handleInternalLinkClick}
               loading={<Loader2 className="w-10 h-10 text-[#1765a4] animate-spin mx-auto mt-10" />}
               error={<p className="text-red-500 mt-10 font-bold text-center">Failed to load the secure document.</p>}
               className="flex flex-col gap-8 pb-10" 
@@ -171,7 +190,7 @@ const PlanViewer = () => {
               {Array.from(new Array(numPages), (el, index) => (
                 <div 
                   key={`page_${index + 1}`} 
-                  id={`pdf-page-${index + 1}`} /* 🚨 TARGET ID FOR SCROLLING */
+                  id={`pdf-page-${index + 1}`}
                   className="mb-8 shadow-2xl rounded-sm bg-white overflow-hidden shrink-0 border border-gray-200 relative"
                 >
                   <Page
