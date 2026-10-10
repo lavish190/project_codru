@@ -260,13 +260,6 @@ const PlanViewer = () => {
       >
         <div className="w-fit min-w-full mx-auto">
           <div ref={pdfWrapperRef} className="flex flex-col items-center origin-center">
-            
-            {/* INDEX INSTRUCTION TEXT */}
-            {numPages && (
-               <div className="text-center mb-6 text-gray-500 font-medium italic">
-                 Click on any section below to jump directly to that page.
-               </div>
-            )}
 
             <Document
               file={securePdfUrl}
