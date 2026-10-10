@@ -2385,7 +2385,7 @@ app.put("/expert-connect/schedule/:connectionId", authenticate, async (req, res)
 // PROGRAM PLAN LEADS (Secured Sales Funnel)
 // ==========================================
 
-// 🛡️ ANTI-SPAM: In-memory Rate Limiter (No extra npm packages needed!)
+// 🛡️ ANTI-SPAM: In-memory Rate Limiter
 const leadSpamCache = new Map();
 const SPAM_LIMIT = 3; // Max requests
 const SPAM_WINDOW = 15 * 60 * 1000; // 15 minutes
@@ -2421,19 +2421,18 @@ app.post("/get-plan-details", async (req, res) => {
       leadSpamCache.set(spamKey, { count: 1, firstRequest: now });
     }
 
-    // 3. 🛡️ DE-DUPLICATION CHECK
-    // Did they already ask for THIS SPECIFIC plan?
+    // 3. 🛡️ DE-DUPLICATION CHECK & LINK GENERATION
     let lead = await PlanLead.findOne({ email: cleanEmail, plan_interest: plan_interest });
     const existingUser = await User.findOne({ email: cleanEmail });
 
     let customTrackingUrl = "";
 
     if (lead) {
-      // ✅ They already asked for this! Just reuse their existing link.
+      // ✅ Reuse existing tracking link
       customTrackingUrl = lead.trackingUrl;
       console.log(`[Lead] Re-sending existing brochure to ${cleanEmail}`);
     } else {
-      // ✅ Brand new request! Create it.
+      // ✅ Brand new request!
       lead = new PlanLead({
         name,
         email: cleanEmail,
@@ -2453,7 +2452,6 @@ app.post("/get-plan-details", async (req, res) => {
       lead.trackingUrl = customTrackingUrl;
       await lead.save();
     }
-
 
     // ----------------------------------------------------
     // COMMUNICATION BLOCK
@@ -2499,12 +2497,15 @@ app.post("/get-plan-details", async (req, res) => {
     try {
       const botNumberId = process.env.PHONE_NUMBER_ID || "1049944734868137"; 
       
+      // Clean phone number (ensure country code exists if required by your template setup)
+      let cleanWhatsapp = lead.whatsapp.replace(/\D/g, "");
+      
       const waPayload = {
         messaging_product: "whatsapp",
-        to: lead.whatsapp.replace(/\D/g, ""), // Strips out symbols
+        to: cleanWhatsapp,
         type: "template",
         template: {
-          name: "plan_details", // 🚨 Updated template name
+          name: "plan_details", 
           language: { code: "en" },
           components: [
             {
@@ -2519,15 +2520,17 @@ app.post("/get-plan-details", async (req, res) => {
               sub_type: "url",
               index: "0", 
               parameters: [
-                { type: "text", text: lead._id.toString() } 
+                { type: "text", text: lead._id.toString() } // Matches dynamic URL at the end
               ]
             }
           ]
         }
       };
 
+      // Updated to v20.0 Graph API for future-proofing
+      const axios = require('axios'); // Ensure axios is imported if not globally available
       await axios.post(
-        `https://graph.facebook.com/v19.0/${botNumberId}/messages`,
+        `https://graph.facebook.com/v20.0/${botNumberId}/messages`,
         waPayload,
         { headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` } }
       );
@@ -2544,6 +2547,8 @@ app.post("/get-plan-details", async (req, res) => {
     res.status(500).json({ error: "Failed to process your request. Please try again." });
   }
 });
+
+
 // ==========================================
 // FETCH BROCHURE DETAILS FOR PDF VIEWER
 // ==========================================
@@ -2562,7 +2567,7 @@ app.get("/api/brochure-data/:id", async (req, res) => {
       return res.status(404).json({ error: "Brochure link expired or not found." });
     }
 
-    // Return only what the frontend needs to show the PDF
+    // Return only what the frontend needs to show the UI context
     res.status(200).json({
       success: true,
       name: lead.name,
@@ -2574,6 +2579,7 @@ app.get("/api/brochure-data/:id", async (req, res) => {
     res.status(500).json({ error: "Server error while fetching brochure." });
   }
 });
+
 
 // ==========================================
 // SECURE PDF STREAMING ROUTE
@@ -2593,30 +2599,20 @@ app.get("/api/view-pdf/:id", async (req, res) => {
       return res.status(404).send("Brochure link expired or not found.");
     }
 
-    // 3. Optional: Track the view! 
-    // You can see exactly how many times a parent opens the brochure
+    // 3. Track the view! 
     lead.viewCount = (lead.viewCount || 0) + 1;
     lead.lastViewedAt = new Date();
     await lead.save();
 
-    // 4. Map the requested plan to your exact file names
-    const pdfFiles = {
-      "2-Year Program": "2_year_plan.pdf",
-      "4-Year Program": "4_year_plan.pdf",
-      "7-Year Program": "7_year_plan.pdf"
-    };
-
-    const fileName = pdfFiles[lead.plan_interest];
-    if (!fileName) {
-      return res.status(404).send("Brochure file not found for this program.");
-    }
+    // 4. 🚨 Master PDF File (No matter which plan they requested)
+    const fileName = "Cute_Learning_through_Homeschooling.pdf";
 
     // 5. Build the secure path to the file
     const filePath = path.join(__dirname, "assets", "pdfs", fileName);
 
     // 6. Send the file directly to the browser viewer
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", "inline; filename=Curious_Team_Brochure.pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
     res.sendFile(filePath);
 
   } catch (error) {
