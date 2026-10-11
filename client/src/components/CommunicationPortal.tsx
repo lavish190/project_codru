@@ -11,7 +11,7 @@ const CommunicationPortal = () => {
   const [activeChat, setActiveChat] = useState<any | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   
-  // 🚨 THE MISSING VARIABLE: Controls the Profile Slide-over
+  // Controls the Profile Slide-over
   const [showProfile, setShowProfile] = useState(false);
 
   // Messaging States
@@ -28,15 +28,12 @@ const CommunicationPortal = () => {
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(() => { scrollToBottom(); }, [chatHistory]);
 
-
-  // 🚨 NEW: Listen for notifications telling the portal to open!
+  // Listen for notifications telling the portal to open!
   useEffect(() => {
-    const handleOpenPortal = (e) => {
-      setIsOpen(true); // Pop the portal open
+    const handleOpenPortal = (e: any) => {
+      setIsOpen(true); 
       
-      // If the notification passed a specific user to chat with, open that chat directly!
       if (e.detail && e.detail.connectionId) {
-        // Find that user in the circle and set them as active
         setCircle((currentCircle) => {
           const targetUser = currentCircle.find(u => u.connectionId === e.detail.connectionId);
           if (targetUser) setActiveChat(targetUser);
@@ -60,20 +57,16 @@ const CommunicationPortal = () => {
   };
   useEffect(() => { fetchCircle(); }, [isOpen]);
 
-  // 🚨 THE UNIFIED LISTENER (Local + Socket)
+  // THE UNIFIED LISTENER (Local + Socket)
   useEffect(() => {
-    // Define what happens when we hear the signal
     const handleRefreshCircle = () => {
       console.log("🔄 Refreshing communication circle...");
       fetchCircle(); 
     };
 
-    // 1. Listen for LOCAL events (when YOU accept someone)
     window.addEventListener('refresh-communication-circle', handleRefreshCircle);
 
-    // 2. Set up SHARED SOCKET connection (for when THEY accept you)
     if (username) {
-      // We just use the imported 'socket' directly! No 'io(...)' needed.
       socket.emit("join", username); 
 
       const handleSocketSignal = () => {
@@ -84,14 +77,12 @@ const CommunicationPortal = () => {
 
       socket.on("force-refresh-circle", handleSocketSignal);
 
-      // 3. Cleanup on unmount
       return () => {
         window.removeEventListener('refresh-communication-circle', handleRefreshCircle);
-        socket.off("force-refresh-circle", handleSocketSignal); // 🚨 Just turn off the listener
+        socket.off("force-refresh-circle", handleSocketSignal); 
       };
     }
 
-    // Fallback cleanup if username is missing
     return () => {
       window.removeEventListener('refresh-communication-circle', handleRefreshCircle);
     };
@@ -110,7 +101,7 @@ const CommunicationPortal = () => {
 
   useEffect(() => {
     fetchMessages();
-    const interval = setInterval(fetchMessages, 10000); // Poll every 10s
+    const interval = setInterval(fetchMessages, 10000); 
     return () => clearInterval(interval);
   }, [activeChat]);
 
@@ -165,10 +156,6 @@ const CommunicationPortal = () => {
   const handleDisconnect = async () => {
     if (!activeChat || !window.confirm(`Are you sure you want to disconnect with ${activeChat.name}?`)) return;
     
-    // 🚨 DEBUG: Let's see exactly what this looks like in your browser console!
-    console.log("Raw Connection ID:", activeChat.connectionId);
-
-    // 🚨 THE FIX: Force it into a clean string, even if it's an object!
     const safeConnectionId = typeof activeChat.connectionId === "object" 
       ? (activeChat.connectionId._id || activeChat.connectionId.toString()) 
       : activeChat.connectionId;
@@ -176,14 +163,12 @@ const CommunicationPortal = () => {
     setIsDisconnecting(true);
     
     try {
-      // Use the safe string in the URL!
       const res = await fetch(`${import.meta.env.VITE_API}expert-connect/disconnect/${safeConnectionId}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${localStorage.getItem("jwtoken")}` }
       });
       
       if (res.ok) {
-        // Use the safe string here too for the filter!
         setCircle(prev => prev.filter(c => c.connectionId !== safeConnectionId && c.connectionId?._id !== safeConnectionId));
         window.dispatchEvent(new Event('refresh-communication-circle'));
         setActiveChat(null); 
@@ -207,32 +192,28 @@ const CommunicationPortal = () => {
     const meetTime = new Date(activeChat.meetingDate).getTime();
     const currentTime = new Date().getTime();
     
-    // Check if the date is actually valid (not NaN) AND if current time is before the 1-hour expiration
     if (!isNaN(meetTime) && (meetTime + (60 * 60 * 1000) > currentTime)) {
       isMeetingActive = true;
     }
   }
-  console.log("Current Active Chat Object:", activeChat);
-  // Temporary console.log so you can see exactly what the database is giving you!
-  //console.log("Meeting Date from DB:", activeChat?.meetingDate, " | Is Active:", isMeetingActive);
 
   if (circle.length === 0 && !isOpen) return null;
 
   return (
     <>
-      {/* THE FLOATING TRIGGER */}
-      <button onClick={() => setIsOpen(true)} className={`fixed bottom-8 right-8 z-90 bg-linear-to-br from-brand-blue to-blue-600 text-white p-4 rounded-full shadow-xl shadow-blue-500/30 hover:scale-110 transition-all duration-300 ${isOpen ? 'opacity-0 pointer-events-none scale-50' : 'opacity-100 scale-100'}`}>
+      {/* 🚨 MOBILE RESPONSIVE TRIGGER BUTTON (z-[1050] to beat navbar, bottom-24 to float above it) */}
+      <button onClick={() => setIsOpen(true)} className={`fixed bottom-24 md:bottom-8 right-4 md:right-8 z-[1050] bg-gradient-to-br from-brand-blue to-blue-600 text-white p-4 rounded-full shadow-xl shadow-blue-500/30 hover:scale-110 transition-all duration-300 ${isOpen ? 'opacity-0 pointer-events-none scale-50' : 'opacity-100 scale-100'}`}>
         <div className="relative">
           <MessageSquare size={24} className="text-white drop-shadow-sm" />
           <span className="absolute -top-2 -right-2 bg-brand-orange text-white text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-brand-blue shadow-sm">{circle.length}</span>
         </div>
       </button>
 
-      {/* THE COMMUNICATION PORTAL OVERLAY */}
-      <div className={`fixed bottom-24 right-8 z-100 w-96 bg-white rounded-4xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col transition-all duration-500 origin-bottom-right ${isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-50 pointer-events-none translate-y-10'}`} style={{ height: '600px', maxHeight: '75vh' }}>
+      {/* 🚨 MOBILE RESPONSIVE PORTAL OVERLAY (left-4 right-4 for centering, z-[1050]) */}
+      <div className={`fixed bottom-[5.5rem] md:bottom-24 right-4 left-4 md:left-auto md:right-8 z-[1050] w-auto md:w-96 bg-white rounded-4xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col transition-all duration-500 origin-bottom md:origin-bottom-right ${isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-50 pointer-events-none translate-y-10'}`} style={{ height: '600px', maxHeight: 'calc(100dvh - 7rem)' }}>
         
         {/* DYNAMIC HEADER */}
-        <div className="bg-linear-to-r from-brand-blue to-blue-600 text-white p-5 flex items-center justify-between shadow-sm z-20">
+        <div className="bg-gradient-to-r from-brand-blue to-blue-600 text-white p-5 flex items-center justify-between shadow-sm z-20">
           {activeChat ? (
             <div className="flex items-center gap-3">
               <button 
@@ -245,7 +226,6 @@ const CommunicationPortal = () => {
                 <ArrowLeft size={18} />
               </button>
               
-              {/* CLICKABLE HEADER TO OPEN PROFILE */}
               <div 
                 onClick={() => setShowProfile(true)} 
                 className="flex items-center gap-3 cursor-pointer group transition-all"
@@ -294,7 +274,6 @@ const CommunicationPortal = () => {
               {activeChat.specialty || activeChat.role}
             </span>
             
-            {/* 🚨 REPLACED: Followers & Following Stats */}
             <div className="w-full bg-slate-50 rounded-2xl p-4 border border-slate-100 mb-6 flex items-center justify-center divide-x divide-slate-200">
               <div className="flex-1 flex flex-col items-center">
                 <span className="text-xl font-black text-slate-800">
@@ -344,10 +323,8 @@ const CommunicationPortal = () => {
         {activeChat && !showProfile && (
           <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden relative">
             
-            {/* The Action Bar */}
             <div className="bg-white border-b border-slate-100 p-3 flex gap-2 shadow-sm z-20 relative">
               
-              {/* 🚨 SO MUCH CLEANER! */}
               {isMeetingActive ? (
                 <a href={activeChat.meetingLink !== "TBD" ? activeChat.meetingLink : "#"} target="_blank" rel="noreferrer" className="flex-1 bg-brand-blue text-white text-xs font-bold py-2 rounded-xl flex items-center justify-center gap-1.5 hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20">
                     <Video size={14} /> Join Scheduled Meet
@@ -365,7 +342,6 @@ const CommunicationPortal = () => {
                 {isDisconnecting ? <Loader2 size={14} className="animate-spin" /> : <><UserMinus size={14} /> Disconnect</>}
               </button>
 
-              {/* THE SCHEDULE DROPDOWN */}
               {!(activeChat.meetingDate && new Date(activeChat.meetingDate) > new Date()) && showScheduleMenu && (
                 <div className="absolute top-full left-3 right-3 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 z-50 animate-in slide-in-from-top-2">
                   <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-3">Set Meeting Time</h4>
@@ -386,12 +362,10 @@ const CommunicationPortal = () => {
               )}
             </div>
 
-            {/* THE CHAT HISTORY AREA */}
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 custom-scrollbar">
               
-              {/* THE STREAMLINED PINNED BANNER */}
               {activeChat.meetingDate && new Date(activeChat.meetingDate) > new Date() && (
-                <div className="bg-linear-to-r from-blue-50 to-indigo-50 border-b border-blue-100 p-4 shadow-sm text-center z-10 shrink-0">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 p-4 shadow-sm text-center z-10 shrink-0">
                   <p className="text-[10px] font-black text-brand-blue uppercase tracking-widest mb-1">Upcoming Meeting</p>
                   <p className="text-sm font-bold text-slate-800">
                     {new Date(activeChat.meetingDate).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -406,7 +380,6 @@ const CommunicationPortal = () => {
                 </div>
               )}
 
-              {/* Messages */}
               {chatHistory.map((msg) => {
                 const isMe = msg.sender?._id === currentUserId || msg.sender === currentUserId;
                 return (
@@ -423,7 +396,6 @@ const CommunicationPortal = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* MESSAGE INPUT FOOTER */}
             <div className="p-4 bg-white border-t border-slate-100">
               <form onSubmit={handleSendMessage} className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-2xl focus-within:ring-2 focus-within:ring-brand-blue/20 focus-within:border-brand-blue transition-all">
                 <input 
