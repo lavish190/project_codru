@@ -1901,7 +1901,8 @@ router.put("/api/counselor/update-single-class/:admissionId/:classId", authentic
       );
     }
 
-    if (req.transporter && admission.parent?.email) {
+    // 🚨 FIXED: Removed "req." from transporter
+    if (transporter && admission.parent?.email) {
       const mailOptions = {
         from: process.env.EMAIL,
         to: admission.parent.email,
@@ -1916,8 +1917,9 @@ router.put("/api/counselor/update-single-class/:admissionId/:classId", authentic
                  </div>
                </div>`,
       };
-      req.transporter.sendMail(mailOptions, (err) => {
+      transporter.sendMail(mailOptions, (err) => {
         if (err) console.error("Failed to send schedule update email:", err);
+        else console.log(`✅ Schedule update email sent to ${admission.parent.email}`);
       });
     }
 
@@ -2223,6 +2225,7 @@ router.post("/api/parent/create-student-account", authenticate, async (req, res)
 
   try {
     const parentUser = await User.findById(parentId);
+    if (!parentUser) return res.status(404).json({ error: "Parent account not found." });
     if (email.toLowerCase() === parentUser.email.toLowerCase()) {
        return res.status(400).json({ error: "Please use an email distinct from your Parent account." });
     }
