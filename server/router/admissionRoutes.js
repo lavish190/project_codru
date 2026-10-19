@@ -177,19 +177,28 @@ router.post("/api/start-admission", async (req, res) => {
     await OTP.deleteMany({ email: cleanEmail });
     await OTP.create({ email: cleanEmail, otp: generatedOtp });
 
-    if (req.transporter) {
+    // 🚨 FIX: Removed 'req.' so it uses the globally imported transporter!
+    if (transporter) {
       const mailOptions = {
         from: process.env.EMAIL,
         to: cleanEmail,
         subject: "Your Admission Verification Code - CuTe Learning",
         html: `<div style="font-family: Arial; padding: 20px;">
                  <h2>Welcome to CuTe Learning!</h2>
-                 <p>Your verification code to schedule the discovery call is: <strong>${generatedOtp}</strong></p>
+                 <p>Your verification code to schedule the discovery call is: <strong style="font-size: 20px; letter-spacing: 2px;">${generatedOtp}</strong></p>
                </div>`,
       };
-      req.transporter.sendMail(mailOptions, (error) => {
-        if (error) console.error("Error sending Admission OTP:", error);
+      
+      // 🚨 FIX: Removed 'req.' here as well
+      transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+            console.error("Error sending Admission OTP:", error);
+        } else {
+            console.log(`✅ OTP sent successfully to ${cleanEmail}`);
+        }
       });
+    } else {
+        console.error("Transporter is not defined! Check your import.");
     }
 
     res.status(200).json({ 
