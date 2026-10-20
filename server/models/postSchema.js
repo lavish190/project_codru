@@ -38,6 +38,9 @@ const postSchema = new mongoose.Schema({
   imageUrl: { type: String, default: "" }, // For the Instagram vibe!
   title: { type: String }, // Optional
   content: { type: String, required: true }, // The caption
+
+  status: { type: String, enum: ["published", "scheduled"], default: "published" },
+  scheduledFor: { type: Date, default: null },
   
   createdAt: {
     type: Date,

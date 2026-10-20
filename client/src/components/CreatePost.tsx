@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Image as ImageIcon, X, Loader2, Send } from "lucide-react";
+import { Image as ImageIcon, X, Loader2, Send, Clock } from "lucide-react";
 import Muialert from "./Muialert";
 import { UserData } from "../App";
 
@@ -14,13 +14,16 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   
+  // 🚨 NEW: Scheduling States
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduledFor, setScheduledFor] = useState("");
+
   const [isUploading, setIsUploading] = useState(false);
   const [alert, setAlert] = useState({ show: false, message: "", type: "success" as "success" | "error" });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
-  // Handle local image selection (Preview only, doesn't upload yet)
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -44,19 +47,23 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       return;
     }
 
+    if (showSchedule && scheduledFor && new Date(scheduledFor) <= new Date()) {
+      setAlert({ show: true, message: "Scheduled time must be in the future.", type: "error" });
+      return;
+    }
+
     setIsUploading(true);
     let finalImageUrl = "";
 
     try {
-      // 1. If they attached an image, send it to Cloudinary FIRST
       if (imageFile) {
         const formData = new FormData();
         formData.append("file", imageFile);
-        formData.append("upload_preset", "cute_profiles"); // <-- CHANGE THIS
-        formData.append("cloud_name", "da6jhcsmm");       // <-- CHANGE THIS
+        formData.append("upload_preset", "cute_profiles"); 
+        formData.append("cloud_name", "da6jhcsmm");       
 
         const cloudinaryRes = await fetch(
-          "https://api.cloudinary.com/v1_1/da6jhcsmm/image/upload", // <-- CHANGE THIS
+          "https://api.cloudinary.com/v1_1/da6jhcsmm/image/upload", 
           { method: "POST", body: formData }
         );
 
@@ -65,7 +72,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
         finalImageUrl = cloudinaryData.secure_url;
       }
 
-      // 2. Send the post to your backend (Matches our new postSchema!)
       const token = localStorage.getItem("jwtoken");
       if (!token) {
         navigate("/signin");
@@ -75,11 +81,10 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       const postData = {
         content: content,
         imageUrl: finalImageUrl, 
-        // We don't need to send username/photo anymore because the backend 
-        // will extract the User ID from the 'jwtoken' via your auth middleware!
+        scheduledFor: showSchedule && scheduledFor ? new Date(scheduledFor).toISOString() : null
       };
 
-      const response = await fetch(`${import.meta.env.VITE_API}posts`, { // Make sure backend route is /posts
+      const response = await fetch(`${import.meta.env.VITE_API}posts`, { 
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -90,17 +95,21 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
       if (!response.ok) throw new Error("Failed to create post");
 
-      // 3. Success! Clear the form.
       setContent("");
       removeImage();
-      setAlert({ show: true, message: "Post shared successfully!", type: "success" });
+      setShowSchedule(false);
+      setScheduledFor("");
       
-      // Optional: navigate back to the feed after posting
-      // setTimeout(() => navigate("/"), 1500);
+      const isScheduled = showSchedule && scheduledFor;
+      setAlert({ 
+        show: true, 
+        message: isScheduled ? "Post scheduled successfully!" : "Post shared successfully!", 
+        type: "success" 
+      });
+      
       onPostCreated();
 
     } catch (error: any) {
-      console.error("Error creating post:", error);
       setAlert({ show: true, message: error.message || "Something went wrong", type: "error" });
     } finally {
       setIsUploading(false);
@@ -112,10 +121,7 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       <h2 className="text-2xl font-display font-bold text-brand-blue mb-6">Create a CuTe Post</h2>
       
       <form onSubmit={handleSubmit} className="space-y-4">
-        
-        {/* User Info & Text Area */}
         <div className="flex gap-4">
-          {/* Avatar */}
           <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border-2 border-brand-orange/20">
             {userData?.Photo ? (
               <img src={userData.Photo} alt="Profile" className="w-full h-full object-cover" />
@@ -126,7 +132,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
             )}
           </div>
           
-          {/* Text Area */}
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
@@ -137,7 +142,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           />
         </div>
 
-        {/* Image Preview Area */}
         {imagePreview && (
           <div className="relative ml-16 mt-2 rounded-2xl overflow-hidden shadow-sm border border-gray-100 inline-block max-w-full">
             <img src={imagePreview} alt="Preview" className="max-h-80 object-contain" />
@@ -151,33 +155,67 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           </div>
         )}
 
+        {/* 🚨 NEW: Schedule Picker Dropdown */}
+        {showSchedule && (
+          <div className="ml-16 mt-2 p-4 bg-blue-50 border border-blue-100 rounded-2xl animate-in slide-in-from-top-2">
+            <label className="block text-xs font-bold text-brand-blue uppercase tracking-widest mb-2">
+              Publish Date & Time
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="datetime-local"
+                value={scheduledFor}
+                onChange={(e) => setScheduledFor(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+              />
+              <button
+                type="button"
+                onClick={() => { setShowSchedule(false); setScheduledFor(""); }}
+                className="text-gray-400 hover:text-red-500 transition-colors p-2"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         <hr className="border-gray-100 my-4" />
 
-        {/* Bottom Toolbar */}
         <div className="flex items-center justify-between ml-16">
-          
-          {/* Add Image Button */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 text-brand-blue hover:text-brand-orange hover:bg-orange-50 px-4 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50"
-            disabled={isUploading}
-          >
-            <ImageIcon className="w-5 h-5" />
-            <span>Photo</span>
-          </button>
-          <input
-            type="file"
-            accept="image/*"
-            ref={fileInputRef}
-            className="hidden"
-            onChange={handleImageSelect}
-          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 text-brand-blue hover:text-brand-orange hover:bg-orange-50 px-4 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50"
+              disabled={isUploading}
+            >
+              <ImageIcon className="w-5 h-5" />
+              <span className="hidden sm:inline">Photo</span>
+            </button>
+            <input
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={handleImageSelect}
+            />
 
-          {/* Submit Button */}
+            {/* 🚨 NEW: Schedule Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setShowSchedule(!showSchedule)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50 ${showSchedule ? 'text-brand-orange bg-orange-50' : 'text-brand-blue hover:text-brand-orange hover:bg-orange-50'}`}
+              disabled={isUploading}
+            >
+              <Clock className="w-5 h-5" />
+              <span className="hidden sm:inline">Schedule</span>
+            </button>
+          </div>
+
           <button
             type="submit"
-            disabled={isUploading || (!content.trim() && !imageFile)}
+            disabled={isUploading || (!content.trim() && !imageFile) || (showSchedule && !scheduledFor)}
             className="flex items-center gap-2 bg-brand-orange text-white px-6 py-2.5 rounded-full font-bold shadow-md hover:bg-orange-600 hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5"
           >
             {isUploading ? (
@@ -185,7 +223,7 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
             ) : (
               <>
                 <Send className="w-4 h-4" />
-                <span>Post</span>
+                <span>{showSchedule && scheduledFor ? "Schedule" : "Post"}</span>
               </>
             )}
           </button>

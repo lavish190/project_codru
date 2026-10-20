@@ -6,33 +6,46 @@ const sendAutoNotification = require("../utils/notify");
 const router = express.Router();
 
 // ==========================================
-// 1. CREATE A POST
+// 1. CREATE A POST (Supports Scheduling)
 // ==========================================
 router.post("/posts", authenticate, async (req, res) => {
   try {
-    const { content, imageUrl } = req.body; // Changed from title/content/username
+    const { content, imageUrl, scheduledFor } = req.body; 
     
-    // Require at least text or an image
     if (!content && !imageUrl) {
       return res.status(400).json({ error: "Post must contain text or an image." });
     }
 
+    let postStatus = "published";
+    let parsedDate = null;
+
+    if (scheduledFor) {
+      parsedDate = new Date(scheduledFor);
+      if (parsedDate > new Date()) {
+        postStatus = "scheduled";
+      }
+    }
+
     const newPost = new Post({
-      userId: req.userId, // Authenticate middleware provides this!
+      userId: req.userId,
       content: content || "",
       imageUrl: imageUrl || "",
+      status: postStatus,
+      scheduledFor: parsedDate
     });
 
     await newPost.save();
 
-    // Push to the user's 'posts' array (formerly blogs)
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
     user.posts.push(newPost._id);
     await user.save();
 
-    res.status(201).json({ message: "Post created successfully", newPost });
+    res.status(201).json({ 
+      message: postStatus === "scheduled" ? "Post scheduled successfully!" : "Post created successfully", 
+      newPost 
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -50,8 +63,8 @@ router.get("/posts", authenticate, async (req, res) => {
     // Convert ObjectIds to strings for easy comparison
     const followingIds = currentUser.following.map(id => id.toString());
 
-    // 2. Fetch ALL posts, pre-sorted by newest first
-    const allPosts = await Post.find()
+    // 2 This ensures all old posts (with no status field) stay visible!
+    const allPosts = await Post.find({ status: { $ne: "scheduled" } })
       .populate({
         path: "comments",
         populate: { 

@@ -4,6 +4,7 @@ const Event = require('../models/eventSchema');
 const Booking = require("../models/bookingSchema");
 const User = require("../models/userSchema");
 const sendAutoNotification = require('./notify');
+const Post = require('../models/postSchema');
 
 // ==========================================
 // HELPER: MARK AS NO-SHOW
@@ -162,6 +163,29 @@ const startAllCronJobs = (app) => {
   // 2. ATTENDANCE CHECKER (Runs every 30 minutes)
   cron.schedule('*/30 * * * *', () => {
     checkAttendanceAndUnlockStep2(app);
+  });
+
+  // 3. POST PUBLISHER (Runs every 1 minute)
+  cron.schedule('* * * * *', async () => {
+    try {
+      const now = new Date();
+      // Find posts scheduled for the past or present that are still hidden
+      const result = await Post.updateMany(
+        { status: "scheduled", scheduledFor: { $lte: now } },
+        { 
+          $set: { 
+            status: "published", 
+            createdAt: now // 🚨 Resets the timestamp so it goes to the top of the feed!
+          } 
+        }
+      );
+
+      if (result.modifiedCount > 0) {
+        console.log(`✅ Auto-published ${result.modifiedCount} scheduled post(s)!`);
+      }
+    } catch (error) {
+      console.error("Scheduled Post Cron Error:", error);
+    }
   });
 };
 
