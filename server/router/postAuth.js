@@ -338,7 +338,9 @@ router.post("/posts/:postId/comments", authenticate, async (req, res) => {
 router.put("/posts/:postId", authenticate, async (req, res) => {
   try {
     const { postId } = req.params;
-    const { content } = req.body;
+    
+    // 🚨 THE FIX: Extract all editable fields
+    const { content, status, scheduledFor } = req.body;
     
     const user = await User.findOne({ username: req.username });
     const post = await Post.findById(postId);
@@ -350,7 +352,13 @@ router.put("/posts/:postId", authenticate, async (req, res) => {
       return res.status(403).json({ message: "Unauthorized to edit this post" });
     }
 
-    post.content = content;
+    // 🚨 THE FIX: Update fields dynamically
+    if (content !== undefined) post.content = content;
+    if (status !== undefined) post.status = status;
+    
+    // Explicitly handle null for scheduledFor if they convert to published
+    if (scheduledFor !== undefined) post.scheduledFor = scheduledFor;
+
     await post.save();
     res.status(200).json(post);
   } catch (err) {
@@ -370,7 +378,7 @@ router.get("/posts/single/:postId", async (req, res) => {
     .populate({
         path: "comments",
         populate: { 
-          path: "user replies.user", // Level 0 and Level 1
+          path: "user replies.user",
           select: "name username photo" 
         }
       })
@@ -380,6 +388,11 @@ router.get("/posts/single/:postId", async (req, res) => {
       .populate({ path: "comments.replies.user", select: "name username photo" });
 
     if (!post) return res.status(404).json({ message: "Post not found" });
+
+    // 🚨 SECURE THE ROUTE: Block access to scheduled posts
+    if (post.status === "scheduled") {
+      return res.status(403).json({ message: "This post has not been published yet." });
+    }
 
     res.status(200).json(post);
   } catch (err) {

@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, Loader2, ArrowLeft } from "lucide-react";
+import PostRenderer from "./PostRenderer"; // 🚨 NEW: Import the rich text renderer
+import RichTextEditor from "./RichTextEditor"; // 🚨 NEW: Import the rich text editor
 
 // Assuming you have this exported from App.tsx or your types file
 interface SinglePostProps {
@@ -62,7 +64,7 @@ const SinglePost = ({ userData }: SinglePostProps) => {
   }, [postId, isLoggedIn]);
 
   // --- INTERACTION HANDLERS ---
-const handleLike = async () => {
+  const handleLike = async () => {
     if (!isLoggedIn) return;
     try {
       const token = localStorage.getItem("jwtoken");
@@ -163,12 +165,12 @@ const handleLike = async () => {
     }
   };
 
-  // Helper for @mentions
+  // Helper for @mentions in plain-text comments
   const renderTextWithMentions = (text: string) => {
     if (!text) return null;
     const parts = text.split(/(@\w+)/g);
     return parts.map((part, i) => 
-      part.startsWith('@') ? <span key={i} className="text-brand-orange font-semibold">{part}</span> : <span key={i}>{part}</span>
+      part.startsWith('@') ? <span key={i} className="text-brand-orange font-semibold cursor-pointer hover:underline">{part}</span> : <span key={i}>{part}</span>
     );
   };
 
@@ -226,14 +228,22 @@ const handleLike = async () => {
         <div className="p-6">
           {isEditing ? (
             <div className="space-y-2">
-              <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} className="w-full bg-slate-50 border border-brand-orange/50 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange" rows={4} />
-              <div className="flex gap-2 justify-end">
+              <div className="border border-brand-orange/50 rounded-xl overflow-hidden bg-white flex flex-col h-40">
+                <RichTextEditor 
+                  value={editContent} 
+                  onChange={(html) => setEditContent(html)} 
+                  showToolbar={true} 
+                  className="h-full"
+                />
+              </div>
+              <div className="flex gap-2 justify-end mt-2">
                 <button onClick={() => setIsEditing(false)} className="text-xs font-bold text-gray-400 hover:text-gray-600">Cancel</button>
-                <button onClick={handleEditSubmit} className="text-xs font-bold bg-brand-orange text-white px-3 py-1.5 rounded-full">Save</button>
+                <button onClick={() => handleEditSubmit()} disabled={!editContent.trim()} className="text-xs font-bold bg-brand-orange text-white px-3 py-1.5 rounded-full">Save</button>
               </div>
             </div>
           ) : (
-            <p className="text-gray-800 text-lg leading-relaxed whitespace-pre-wrap">{renderTextWithMentions(post.content)}</p>
+            // 🚨 CHANGED: Rendering Tiptap HTML content using the reusable PostRenderer
+            <PostRenderer content={post.content} />
           )}
         </div>
 
