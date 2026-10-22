@@ -21,7 +21,9 @@ import {
   Zap,
   Plus,
   Mail,
-  CalendarDays
+  CalendarDays,
+  FileText,
+  Settings2
 } from "lucide-react";
 
 // Components
@@ -50,6 +52,9 @@ import Overview from './Overview';
 import AdminInternship from "./AdminInternship";
 import CounselorSchedule from "./CounselorSchedule"; 
 import CounselorAdmissionsDesk from "./CounselorAdmissionsDesk";
+import CreateBlog from "./CreateBlog";
+import ManageBlogs from "./ManageBlogs";
+
 
 interface DashboardProps {
   userData: UserData;
@@ -84,7 +89,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
   const isVerifiedParent = isParent && userData.isVerifiedParent;
   const isUnverifiedParent = isParent && !userData.isVerifiedParent;
   const isCounselor = userData?.isCounselor;
-  
+  const [isTeamMember, setIsTeamMember] = useState(!!userData?.isAdmin);
   // Global State for Teachers to select a student
   const [teacherStudents, setTeacherStudents] = useState<any[]>([]);
   const [selectedStudentUsername, setSelectedStudentUsername] = useState<string | null>(null);
@@ -106,13 +111,37 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
       report: "Report", management: "Management", "my-courses": "My Courses",
       "the-village": "The Village (Q&A)", "expert-connect": "Expert Connect",
       "whatsapp-crm": "WhatsApp Support","BulkEmails":"BulkEmails", "admin-internship":"Internship Management",
-      "counselor-schedule": "My Schedule", "admissions-desk": "Admissions Desk",
+      "counselor-schedule": "My Schedule", "admissions-desk": "Admissions Desk", "create-blog": "Publish Blog",
+      "manage-blogs": "Manage Blogs",
     };
     return viewToTabMap[currentView] || "Overview";
   });
 
   const [overviewStats, setOverviewStats] = useState<any>(null);
 
+  useEffect(() => {
+    const checkTeamStatus = async () => {
+      try {
+        // Safely grab the username from local storage just like the rest of your app does
+        const currentUsername = localStorage.getItem("Username") || localStorage.getItem("username");
+        if (!currentUsername) return;
+
+        const res = await fetch(`${import.meta.env.VITE_API}team`);
+        if (res.ok) {
+          const team = await res.json();
+          // Check if current user is in the team array
+          const inTeam = team.some((member: any) => member.username === currentUsername);
+          setIsTeamMember(inTeam || !!userData?.isAdmin);
+        }
+      } catch (error) {
+        console.error("Failed to verify team status", error);
+      }
+    };
+    
+    checkTeamStatus();
+  }, [userData?.isAdmin]); // Re-run if their admin status loads/changes
+
+  
   // Inside Dashboard.tsx
   useEffect(() => {
     const syncViewWithStorage = () => {
@@ -197,7 +226,9 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         "crm": "Management" ,
         "BulkEmails": "Bulk Emails",
         "admin-internship": "Internship Management",
-        "admissions-desk": "Admissions Desk"
+        "admissions-desk": "Admissions Desk",
+        "create-blog": "Publish Blog",
+        "manage-blogs": "Manage Blogs",
       };
 
       setActiveTab(viewToTabMap[target] || "Dashboard"); 
@@ -366,6 +397,13 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
       counselorItems.push({ text: "Admissions Desk", icon: <Users size={22} />, view: "admissions-desk" });
     }
 
+    const teamItems = [];
+    if (isTeamMember) {
+      teamItems.push({ text: "Publish Blog", icon: <FileText size={22} />, view: "create-blog" });
+      teamItems.push({ text: "Manage Blogs", icon: <Settings2 size={22} />, view: "manage-blogs" });
+    }
+
+
     const adminItems = [];
     if (userData.isAdmin) {
       adminItems.push({ text: "Management", icon: <Briefcase size={22} />, view: "crm" });
@@ -456,6 +494,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         {renderGroup("Guidance & Support", parentItems, "text-rose-400")}
         {renderGroup("Academy Tools", premiumItems, "text-slate-400")}
         {renderGroup("Counselor Tools", counselorItems, "text-[#ed7f23]")}
+        {renderGroup("Marketing", teamItems, "text-purple-500")}
         {renderGroup("Admin Tools", adminItems, "text-brand-blue")}
         
         {/* Unverified Teacher Banner */}
@@ -739,6 +778,8 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
               {currentView === "crm" && userData?.isAdmin && <CRM />}
               {currentView === "bulk-emails" && userData?.isAdmin && <BulkEmails userData={userData} />}
               {currentView === "admin-internship" && userData?.isAdmin && <AdminInternship />}
+              {currentView === "create-blog" && isTeamMember && <CreateBlog userData={userData} />}
+              {currentView === "manage-blogs" && isTeamMember && <ManageBlogs userData={userData} />}
 
               {currentView === "the-village" && isParent && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
