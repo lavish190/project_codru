@@ -464,7 +464,7 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
               {/* 🚨 PREVIEW CTA BUTTON */}
               {cta.enabled && (
                 <div className={`max-w-2xl mx-auto mt-12 pt-8 border-t border-gray-100 flex ${cta.alignment}`}>
-                  <a href={cta.link || "#"} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center justify-center gap-2 text-white font-bold transition-transform hover:-translate-y-0.5 shadow-md hover:shadow-lg ${cta.color} ${cta.size} ${cta.width} ${cta.radius}`}>
+                  <a href={cta.link || "#"} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center justify-center gap-2 ${cta.textColor} font-bold transition-transform hover:-translate-y-0.5 shadow-md hover:shadow-lg ${cta.color} ${cta.size} ${cta.width} ${cta.radius}`}>
                     {(cta.iconUrl || cta.newIconFile) && <span className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-xs">❖</span>}
                     {cta.text || "Button Text"}
                   </a>
