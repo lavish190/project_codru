@@ -568,9 +568,9 @@ router.delete("/posts/:postId/comments/:commentId", authenticate, async (req, re
 // ==========================================
 router.post("/blogs", authenticate, async (req, res) => {
   try {
-    const { title, summary, content, coverImage, category, authorName } = req.body;
+    // 🚨 ADDED `cta` TO THE DESTRUCTURING
+    const { title, summary, content, coverImage, category, authorName, cta } = req.body;
 
-    // Fetch user to use their name if authorName isn't manually provided
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -580,27 +580,21 @@ router.post("/blogs", authenticate, async (req, res) => {
       content,
       coverImage,
       category,
-      authorName: authorName || user.name, // Defaults to logged-in user's name
+      authorName: authorName || user.name,
       authorId: req.userId,
+      cta // 🚨 ADDED CTA HERE
     });
     
     await newBlog.save();
 
-    // Notify Cloudflare to rebuild the site
     const cloudflareWebhookUrl = process.env.CLOUDFLARE_DEPLOY_WEBHOOK;
     if (cloudflareWebhookUrl) {
-      // Native Node fetch (Node 18+)
       fetch(cloudflareWebhookUrl, { method: "POST" })
         .then(() => console.log("🚀 Cloudflare build triggered successfully!"))
         .catch(err => console.error("Webhook failed to trigger:", err));
-    } else {
-      console.warn("⚠️ No Cloudflare webhook URL found in .env");
     }
 
-    res.status(201).json({ 
-      message: "Blog published! Cloudflare is rebuilding the site...", 
-      newBlog 
-    });
+    res.status(201).json({ message: "Blog published! Cloudflare is rebuilding...", newBlog });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -609,27 +603,20 @@ router.post("/blogs", authenticate, async (req, res) => {
 // ==========================================
 // 12. EXPORT ALL BLOGS FOR CLOUDFLARE PYTHON SCRIPT
 // ==========================================
-// Notice there is NO 'authenticate' middleware here. 
-// Cloudflare needs to access this publicly during the build process!
 router.get("/blogs/export", async (req, res) => {
   try {
-    // Fetch all blogs, newest first
     const blogs = await Blog.find().sort({ publishedAt: -1 });
     
-    // Map it to exactly match your legacy JSON format for Ninja2
     const formattedBlogs = blogs.map(blog => ({
       id: blog._id.toString(),
       title: blog.title,
       summary: blog.summary,
       content: blog.content,
       image: blog.coverImage,
-      date: blog.publishedAt.toLocaleDateString("en-US", { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      }), // e.g., "March 4, 2026"
+      date: blog.publishedAt.toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' }),
       author: blog.authorName,
-      category: blog.category
+      category: blog.category,
+      cta: blog.cta // 🚨 ADDED CTA EXPORT HERE
     }));
 
     res.status(200).json(formattedBlogs);

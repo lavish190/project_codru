@@ -1,11 +1,12 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from "react";
-import { Bold, Italic, Strikethrough, List, ListOrdered } from "lucide-react";
+import { Bold, Italic, Strikethrough, List, ListOrdered, Heading1, Heading2, Heading3, Link as LinkIcon, Unlink } from "lucide-react";
 
 // --- TIPTAP IMPORTS ---
 import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Mention from '@tiptap/extension-mention';
+import Link from '@tiptap/extension-link';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 
@@ -71,16 +72,21 @@ interface RichTextEditorProps {
   placeholder?: string;
   showToolbar?: boolean;
   className?: string; 
+  allowHeadings?: boolean; 
 }
 
-const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeholder = "What's on your mind?", showToolbar = false, className = "" }) => {
-  
-  // 🚨 NEW: Smart initialization logic to protect legacy spacing
+const RichTextEditor: React.FC<RichTextEditorProps> = ({ 
+  value, 
+  onChange, 
+  placeholder = "What's on your mind?", 
+  showToolbar = false, 
+  className = "",
+  allowHeadings = false 
+}) => {
+  const [, setForceRender] = useState(0);
   const processInitialValue = (val: string) => {
     if (!val) return "";
-    // If it is already HTML (from Tiptap), leave it alone.
     if (/<[a-z][\s\S]*>/i.test(val)) return val;
-    // If it is legacy plain text, convert \n to <br> so the editor respects lines!
     return val.replace(/\n/g, '<br>');
   };
 
@@ -89,8 +95,11 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML(), editor.isEmpty);
     },
+    onSelectionUpdate: () => setForceRender(prev => prev + 1),
+    onTransaction: () => setForceRender(prev => prev + 1),
     extensions: [
-      StarterKit,
+      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-brand-blue underline cursor-pointer' } }),
       Placeholder.configure({ placeholder, emptyEditorClass: 'is-editor-empty' }),
       Mention.configure({
         HTMLAttributes: { class: 'text-brand-orange font-bold bg-orange-50 px-1 rounded-md cursor-pointer' },
@@ -160,9 +169,11 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
       attributes: {
         class: `focus:outline-none w-full p-4 text-slate-700 custom-scrollbar ${className}`,
       },
-      // 🚨 NEW: Auto-detect @mentions and #hashtags when pasting from other apps!
       transformPastedHTML(html) {
         return html
+          // 🚨 Fix Google Docs double spacing: strips empty paragraphs completely
+          .replace(/<p[^>]*>(\s|&nbsp;|<br>)*<\/p>/gi, '')
+          // Preserve mentions and hashtags
           .replace(/(^|\s)@([\w.]+)/g, '$1<span data-type="mention" data-id="$2">@$2</span>')
           .replace(/(^|\s)#([\w.]+)/g, '$1<span data-type="hashtag" data-id="$2">#$2</span>');
       }
@@ -180,8 +191,19 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
 
   if (!editor) return null;
 
+  const setLink = () => {
+    const previousUrl = editor.getAttributes('link').href;
+    const url = window.prompt('URL', previousUrl);
+    if (url === null) return;
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      return;
+    }
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+  };
+
   return (
-    <div className="flex-1 flex flex-col h-full w-full">
+    <div className="flex-1 flex flex-col h-full w-full relative">
       <style>
         {`
           .tippy-box { background: transparent !important; }
@@ -192,17 +214,40 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
           .ProseMirror p:last-child { margin-bottom: 0; }
           .ProseMirror ul { list-style-type: disc; padding-left: 1.5rem; }
           .ProseMirror ol { list-style-type: decimal; padding-left: 1.5rem; }
+          .ProseMirror h1 { font-size: 2.25rem; font-weight: 900; line-height: 1.2; margin-bottom: 1rem; margin-top: 1.5rem; color: #111827; }
+          .ProseMirror h2 { font-size: 1.875rem; font-weight: 800; line-height: 1.3; margin-bottom: 0.875rem; margin-top: 1.5rem; color: #1f2937; }
+          .ProseMirror h3 { font-size: 1.5rem; font-weight: 700; line-height: 1.4; margin-bottom: 0.75rem; margin-top: 1.25rem; color: #374151; }
         `}
       </style>
       
       {showToolbar && (
-        <div className="flex items-center gap-1 border-b border-gray-100 p-2 bg-slate-50/50 rounded-t-2xl shrink-0">
-          <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-100'}`}><Bold className="w-4 h-4" /></button>
-          <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-100'}`}><Italic className="w-4 h-4" /></button>
-          <button onClick={() => editor.chain().focus().toggleStrike().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('strike') ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-100'}`}><Strikethrough className="w-4 h-4" /></button>
-          <div className="w-px h-5 bg-gray-200 mx-1"></div>
-          <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('bulletList') ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-100'}`}><List className="w-4 h-4" /></button>
-          <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('orderedList') ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-100'}`}><ListOrdered className="w-4 h-4" /></button>
+        <div className="sticky top-0 z-[50] flex flex-wrap items-center gap-1 border-b border-gray-100 p-2 bg-slate-50/95 backdrop-blur-md rounded-t-2xl shadow-sm shrink-0">
+          
+          {allowHeadings && (
+            <>
+              <button onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('heading', { level: 1 }) ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-200'}`} title="Heading 1"><Heading1 className="w-4 h-4" /></button>
+              <button onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('heading', { level: 2 }) ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-200'}`} title="Heading 2"><Heading2 className="w-4 h-4" /></button>
+              <button onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('heading', { level: 3 }) ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-200'}`} title="Heading 3"><Heading3 className="w-4 h-4" /></button>
+              <div className="w-px h-5 bg-gray-300 mx-1"></div>
+            </>
+          )}
+
+          <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-200'}`}><Bold className="w-4 h-4" /></button>
+          <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-200'}`}><Italic className="w-4 h-4" /></button>
+          <button onClick={() => editor.chain().focus().toggleStrike().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('strike') ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-200'}`}><Strikethrough className="w-4 h-4" /></button>
+          <div className="w-px h-5 bg-gray-300 mx-1"></div>
+          <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('bulletList') ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-200'}`}><List className="w-4 h-4" /></button>
+          <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('orderedList') ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-200'}`}><ListOrdered className="w-4 h-4" /></button>
+
+          {allowHeadings && (
+            <>
+              <div className="w-px h-5 bg-gray-300 mx-1"></div>
+              <button onClick={setLink} className={`p-2 rounded-lg transition-colors ${editor.isActive('link') ? 'bg-brand-orange text-white' : 'text-gray-500 hover:bg-gray-200'}`} title="Add Link"><LinkIcon className="w-4 h-4" /></button>
+              {editor.isActive('link') && (
+                <button onClick={() => editor.chain().focus().unsetLink().run()} className="p-2 rounded-lg transition-colors text-red-500 hover:bg-red-50" title="Remove Link"><Unlink className="w-4 h-4" /></button>
+              )}
+            </>
+          )}
         </div>
       )}
       
