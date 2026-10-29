@@ -665,8 +665,14 @@ router.put("/blogs/:id", authenticate, async (req, res) => {
     
     // Notify Cloudflare to update the page
     const cloudflareWebhookUrl = process.env.CLOUDFLARE_DEPLOY_WEBHOOK;
+    
     if (cloudflareWebhookUrl) {
-      fetch(cloudflareWebhookUrl, { method: "POST" }).catch(err => console.error(err));
+      console.log(`🔗 Triggering webhook: ${cloudflareWebhookUrl}`);
+      fetch(cloudflareWebhookUrl, { method: "POST" })
+        .then(() => console.log("✅ Webhook sent successfully!"))
+        .catch(err => console.error("❌ Webhook failed:", err));
+    } else {
+      console.log("⚠️ WARNING: CLOUDFLARE_DEPLOY_WEBHOOK is undefined in the backend .env!");
     }
     
     res.status(200).json({ message: "Blog updated! Rebuilding site...", updatedBlog });
