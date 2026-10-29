@@ -16,7 +16,6 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
   const navigate = useNavigate();
   const isEditMode = !!editBlogData;
   
-  // Form States
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [category, setCategory] = useState("Academics");
@@ -24,12 +23,10 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
   const [content, setContent] = useState("");
   const [isContentEmpty, setIsContentEmpty] = useState(true);
   
-  // Image States
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 🚨 CTA DESIGNER STATES
   const [cta, setCta] = useState({
     enabled: false,
     text: "Learn More",
@@ -44,7 +41,6 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
     newIconFile: null as File | null
   });
   
-  // UI States
   const [isPublishing, setIsPublishing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [alert, setAlert] = useState({ show: false, message: "", type: "success" as "success" | "error" });
@@ -202,14 +198,13 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
     <>
       <style>
         {`
-          /* 🚨 SYNCED WITH HTML: pre-wrap and min-height prevent empty lines from collapsing */
-          .tiptap-content { white-space: pre-wrap; }
+          /* 🚨 PERFECT MATCH TO RICH TEXT EDITOR CSS */
           .tiptap-content h1 { font-size: 2.25rem; font-weight: 900; line-height: 1.2; margin-bottom: 1rem; margin-top: 1.5rem; color: #111827; }
           .tiptap-content h2 { font-size: 1.875rem; font-weight: 800; line-height: 1.3; margin-bottom: 0.875rem; margin-top: 1.5rem; color: #1f2937; }
           .tiptap-content h3 { font-size: 1.5rem; font-weight: 700; line-height: 1.4; margin-bottom: 0.75rem; margin-top: 1.25rem; color: #374151; }
-          .tiptap-content ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; }
-          .tiptap-content ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 1rem; }
-          .tiptap-content p { margin-bottom: 1rem; line-height: 1.7; min-height: 1.5rem; }
+          .tiptap-content ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+          .tiptap-content ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+          .tiptap-content p { margin-bottom: 0.5rem; min-height: 1.25rem; } 
           .tiptap-content p:last-child { margin-bottom: 0; }
           .tiptap-content strong { font-weight: bold; }
           .tiptap-content em { font-style: italic; }
@@ -233,7 +228,6 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
           
           <div className="p-6 border-b border-gray-50 bg-slate-50 flex items-center justify-between rounded-t-3xl">
             <div className="flex items-center gap-3">
-              {/* 🚨 NEW: BACK BUTTON FOR EDIT MODE */}
               {isEditMode && (
                 <button type="button" onClick={onEditComplete} className="p-2 hover:bg-blue-100 bg-blue-50 text-brand-blue rounded-full transition-colors mr-1">
                   <ArrowLeft className="w-5 h-5" />
@@ -430,12 +424,12 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
                 <div className="w-full max-w-4xl mx-auto h-64 bg-gray-100 border-2 border-dashed border-gray-200 rounded-3xl mb-10 flex items-center justify-center text-gray-400 font-bold">Cover Image Placement</div>
               )}
               
-              {/* 🚨 NEW: MATCHED SUMMARY TO HTML PLACEMENT */}
+              {/* 🚨 UPDATED PROSE WRAPPER: Removed whitespace-pre-wrap to match the editor natively */}
               <div className="max-w-2xl mx-auto mb-12">
                 <p className="text-xl font-medium text-gray-800 leading-relaxed mb-8 border-l-4 border-brand-orange pl-4 italic">
                   {summary || "Your summary provides context to the reader before they dive into the main article..."}
                 </p>
-                <div className="tiptap-content text-gray-800 text-lg md:text-xl leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: content || "<p class='text-gray-400 italic'>Your main rich text content will be rendered here...</p>" }} />
+                <div className="tiptap-content text-gray-800 text-lg md:text-xl" dangerouslySetInnerHTML={{ __html: content || "<p class='text-gray-400 italic'>Your main rich text content will be rendered here...</p>" }} />
               </div>
 
               {/* PREVIEW CTA BUTTON */}
