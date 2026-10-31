@@ -34,6 +34,7 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
   const [scheduleConfig, setScheduleConfig] = useState(initialScheduleConfig);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [isSocialMenuOpen, setIsSocialMenuOpen] = useState(false);
 
   const [isLinkedInConnected, setIsLinkedInConnected] = useState(false);
   const [postToLinkedIn, setPostToLinkedIn] = useState(false);
@@ -269,11 +270,16 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       </button>
       <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleImageSelect} />
 
-      {/* Upward Hover Socials Menu */}
-      <div className="relative group flex items-center justify-center">
+      {/* Upward Hover/Click Socials Menu */}
+      <div 
+        className="relative flex items-center justify-center"
+        onMouseEnter={() => setIsSocialMenuOpen(true)}
+        onMouseLeave={() => setIsSocialMenuOpen(false)}
+      >
         {/* Main Trigger Icon */}
         <button 
           type="button" 
+          onClick={() => setIsSocialMenuOpen((prev) => !prev)}
           className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors ${postToLinkedIn ? 'bg-blue-50 text-[#0A66C2]' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
         >
           {postToLinkedIn ? <LinkedinIcon className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
@@ -283,17 +289,20 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
         <div className="absolute bottom-full w-full h-3"></div>
 
         {/* The Upward Expanding Capsule */}
-        <div className="absolute bottom-[calc(100%+0.25rem)] flex flex-col gap-2 bg-white border border-gray-100 shadow-xl rounded-full p-1.5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 translate-y-2 group-hover:translate-y-0 z-20">
+        <div className={`absolute bottom-[calc(100%+0.25rem)] flex flex-col gap-2 bg-white border border-gray-100 shadow-xl rounded-full p-1.5 transition-all duration-200 z-20 ${isSocialMenuOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-2'}`}>
           <button 
             type="button" 
-            onClick={handleLinkedInToggle}
+            onClick={() => {
+              handleLinkedInToggle();
+              setIsSocialMenuOpen(false); // Closes automatically when tapped
+            }}
             className={`p-2 rounded-full transition-colors flex items-center justify-center ${postToLinkedIn ? 'bg-blue-50 text-[#0A66C2]' : 'text-gray-400 hover:text-[#0A66C2] hover:bg-blue-50'}`}
             title={isLinkedInConnected ? (postToLinkedIn ? "Disable LinkedIn" : "Enable LinkedIn") : "Connect LinkedIn"}
           >
             <LinkedinIcon className="w-4 h-4" />
           </button>
-          {/* You can stack Twitter/Substack buttons right here later! */}
         </div>
+      </div>
       </div>
     </div>
 
