@@ -3,51 +3,106 @@ const Post = require("../models/postSchema");
 const Blog = require("../models/blogSchema");
 const User = require("../models/userSchema");
 const authenticate = require("../middleware/authenticate");
+const SocialConnection = require('../models/SocialConnection');
 const sendAutoNotification = require("../utils/notify");
 const router = express.Router();
 
 // ==========================================
-// 1. CREATE A POST (Supports Scheduling)
+// 1. CREATE A POST (Supports Multi-Platform & Scheduling)
 // ==========================================
 router.post("/posts", authenticate, async (req, res) => {
   try {
-    const { content, imageUrl, scheduledFor } = req.body; 
+    // Note: We now pull 'distribution' from req.body instead of 'scheduledFor'
+    const { content, imageUrl, distribution } = req.body; 
     
     if (!content && !imageUrl) {
       return res.status(400).json({ error: "Post must contain text or an image." });
     }
 
+    // --- 1. BACKWARDS COMPATIBILITY LOGIC ---
+    // Extract the schedule date from the new distribution object for the root fields
     let postStatus = "published";
     let parsedDate = null;
+    const cuteSchedule = distribution?.cute?.scheduledFor;
 
-    if (scheduledFor) {
-      parsedDate = new Date(scheduledFor);
+    if (cuteSchedule) {
+      parsedDate = new Date(cuteSchedule);
       if (parsedDate > new Date()) {
         postStatus = "scheduled";
       }
     }
 
+    // --- 2. CREATE POST ---
     const newPost = new Post({
       userId: req.userId,
       content: content || "",
       imageUrl: imageUrl || "",
-      status: postStatus,
-      scheduledFor: parsedDate
+      status: postStatus, // Legacy field kept alive!
+      scheduledFor: parsedDate, // Legacy field kept alive!
+      distribution: distribution || {} // New multi-platform tracker
     });
 
     await newPost.save();
 
+    // --- 3. UPDATE USER ARRAY (Your original logic!) ---
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
     user.posts.push(newPost._id);
     await user.save();
 
+    // --- 4. LINKEDIN CROSS-POSTING LOGIC ---
+    // Only fire this if they toggled LinkedIn ON and want it posted NOW
+    if (distribution?.linkedin?.status === 'posted') {
+      const connection = await SocialConnection.findOne({ userId: req.userId, provider: 'linkedin' });
+      
+      if (connection && connection.accessToken) {
+        // Strip HTML tags from your rich text editor before sending to LinkedIn
+        const plainTextContent = content.replace(/<[^>]*>?/gm, ''); 
+        
+        try {
+          const linkedInRes = await fetch('https://api.linkedin.com/v2/ugcPosts', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${connection.accessToken}`,
+              'Content-Type': 'application/json',
+              'X-Restli-Protocol-Version': '2.0.0'
+            },
+            body: JSON.stringify({
+              author: connection.providerAccountId,
+              lifecycleState: 'PUBLISHED',
+              specificContent: {
+                'com.linkedin.ugc.ShareContent': {
+                  shareCommentary: { text: plainTextContent },
+                  shareMediaCategory: 'NONE' // Sending text-only for right now
+                }
+              },
+              visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
+            })
+          });
+
+          if (!linkedInRes.ok) {
+            const errData = await linkedInRes.json();
+            console.error("LinkedIn Post Failed:", errData);
+            
+            // Mark as failed in DB so the user knows it didn't go through
+            newPost.distribution.linkedin.status = 'failed';
+            newPost.distribution.linkedin.errorLog = errData.message || "API Error";
+            await newPost.save();
+          }
+        } catch (linkedinErr) {
+          console.error("Error communicating with LinkedIn API:", linkedinErr);
+        }
+      }
+    }
+
+    // --- 5. RESPOND TO FRONTEND ---
     res.status(201).json({ 
       message: postStatus === "scheduled" ? "Post scheduled successfully!" : "Post created successfully", 
       newPost 
     });
   } catch (err) {
+    console.error("Post Creation Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
