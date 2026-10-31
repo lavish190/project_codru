@@ -13,6 +13,7 @@ interface CreatePostProps {
 const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const DRAFT_KEY = `cute_post_draft_${userData._id}`;
   const SCHEDULE_DRAFT_KEY = `cute_post_schedule_draft_${userData._id}`;
+  const LINKEDIN_DRAFT_KEY = `cute_post_linkedin_draft_${userData._id}`;
 
   const [content, setContent] = useState(() => localStorage.getItem(DRAFT_KEY) || "");
   const [isContentEmpty, setIsContentEmpty] = useState(!content);
@@ -65,13 +66,46 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     checkConnections();
   }, []);
 
+  // --- LOAD DRAFTS ONCE USER DATA IS READY ---
+  useEffect(() => {
+    if (userData?._id) {
+      const draftKey = `cute_post_draft_${userData._id}`;
+      const scheduleKey = `cute_post_schedule_draft_${userData._id}`;
+      
+      const savedText = localStorage.getItem(draftKey);
+      if (savedText && isContentEmpty) {
+        setContent(savedText);
+        setIsContentEmpty(false);
+        setHasDraft(true);
+      }
+
+      const savedScheduleRaw = localStorage.getItem(scheduleKey);
+      if (savedScheduleRaw && !scheduleConfig.isScheduled) {
+        try {
+          const parsed = JSON.parse(savedScheduleRaw);
+          setScheduleConfig(parsed);
+          setHasDraft(true);
+        } catch (e) {
+          setScheduleConfig({ isScheduled: true, syncTimes: true, times: { cute: savedScheduleRaw, linkedin: savedScheduleRaw } });
+          setHasDraft(true);
+        }
+      }
+      // Add this right next to where you load the saved text and schedule:
+      const savedLinkedIn = localStorage.getItem(`cute_post_linkedin_draft_${userData._id}`);
+      if (savedLinkedIn === "true") {
+        setPostToLinkedIn(true);
+      }
+    }
+  }, [userData?._id]); // Only runs when the user ID successfully loads
+
   // --- HANDLERS ---
   const handleContentChange = (html: string, isEmpty: boolean) => {
     setContent(html);
     setIsContentEmpty(isEmpty);
     if (isEmpty) {
       localStorage.removeItem(DRAFT_KEY);
-      setHasDraft(scheduleConfig.isScheduled);
+      // Check local storage directly instead of relying on state here
+      setHasDraft(!!localStorage.getItem(SCHEDULE_DRAFT_KEY)); 
     } else {
       localStorage.setItem(DRAFT_KEY, html);
       setHasDraft(true);
@@ -95,7 +129,14 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
   const handleLinkedInToggle = async () => {
   if (isLinkedInConnected) {
-    setPostToLinkedIn(!postToLinkedIn);
+    // 🚨 UPDATE THIS BLOCK
+    const newState = !postToLinkedIn;
+    setPostToLinkedIn(newState);
+    if (newState) {
+      localStorage.setItem(LINKEDIN_DRAFT_KEY, "true");
+    } else {
+      localStorage.removeItem(LINKEDIN_DRAFT_KEY);
+    }
   } else {
     // If not connected, trigger the OAuth flow we built!
     try {
@@ -132,6 +173,7 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const clearDraft = () => {
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SCHEDULE_DRAFT_KEY);
+    localStorage.removeItem(LINKEDIN_DRAFT_KEY);
     setContent("");
     setIsContentEmpty(true);
     setScheduleConfig({ isScheduled: false, syncTimes: true, times: { cute: "", linkedin: "" } });
