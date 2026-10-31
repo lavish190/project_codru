@@ -128,6 +128,7 @@ app.use(require('./router/whatsapp'));
 app.use(require('./router/crm')); 
 app.use(require('./router/overview'));
 app.use(require('./router/admissionRoutes.js'));
+app.use(require('./router/socialAuth'));
 app.use("/internship",require("./router/InternshipRoutes.js"));
 app.use("/api/payment", paymentRoutes);
 

@@ -568,7 +568,6 @@ router.delete("/posts/:postId/comments/:commentId", authenticate, async (req, re
 // ==========================================
 router.post("/blogs", authenticate, async (req, res) => {
   try {
-    // 🚨 ADDED `cta` TO THE DESTRUCTURING
     const { title, summary, content, coverImage, category, authorName, cta } = req.body;
 
     const user = await User.findById(req.userId);
@@ -582,16 +581,14 @@ router.post("/blogs", authenticate, async (req, res) => {
       category,
       authorName: authorName || user.name,
       authorId: req.userId,
-      cta // 🚨 ADDED CTA HERE
+      cta 
     });
     
     await newBlog.save();
 
     const cloudflareWebhookUrl = process.env.CLOUDFLARE_DEPLOY_WEBHOOK;
     if (cloudflareWebhookUrl) {
-      fetch(cloudflareWebhookUrl, { method: "POST" })
-        .then(() => console.log("🚀 Cloudflare build triggered successfully!"))
-        .catch(err => console.error("Webhook failed to trigger:", err));
+      fetch(cloudflareWebhookUrl, { method: "POST" }).catch(console.error);
     }
 
     res.status(201).json({ message: "Blog published! Cloudflare is rebuilding...", newBlog });
@@ -644,10 +641,9 @@ router.delete("/blogs/:id", authenticate, async (req, res) => {
   try {
     await Blog.findByIdAndDelete(req.params.id);
     
-    // Notify Cloudflare to remove the page
     const cloudflareWebhookUrl = process.env.CLOUDFLARE_DEPLOY_WEBHOOK;
     if (cloudflareWebhookUrl) {
-      fetch(cloudflareWebhookUrl, { method: "POST" }).catch(err => console.error(err));
+      fetch(cloudflareWebhookUrl, { method: "POST" }).catch(console.error);
     }
     
     res.status(200).json({ message: "Blog deleted! Rebuilding site..." });
@@ -663,16 +659,9 @@ router.put("/blogs/:id", authenticate, async (req, res) => {
   try {
     const updatedBlog = await Blog.findByIdAndUpdate(req.params.id, req.body, { new: true });
     
-    // Notify Cloudflare to update the page
     const cloudflareWebhookUrl = process.env.CLOUDFLARE_DEPLOY_WEBHOOK;
-    
     if (cloudflareWebhookUrl) {
-      console.log(`🔗 Triggering webhook: ${cloudflareWebhookUrl}`);
-      fetch(cloudflareWebhookUrl, { method: "POST" })
-        .then(() => console.log("✅ Webhook sent successfully!"))
-        .catch(err => console.error("❌ Webhook failed:", err));
-    } else {
-      console.log("⚠️ WARNING: CLOUDFLARE_DEPLOY_WEBHOOK is undefined in the backend .env!");
+      fetch(cloudflareWebhookUrl, { method: "POST" }).catch(console.error);
     }
     
     res.status(200).json({ message: "Blog updated! Rebuilding site...", updatedBlog });
