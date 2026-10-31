@@ -303,7 +303,7 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           </button>
         </div>
       </div>
-      </div>
+      
     </div>
 
     {/* RIGHT SIDE: Clear Draft & Post Actions */}
