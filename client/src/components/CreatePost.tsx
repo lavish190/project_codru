@@ -349,18 +349,18 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     </div>
 
     {/* RIGHT SIDE: Clear Draft & Post Actions */}
-    <div className="flex items-center gap-4 relative">
+    <div className="flex items-center gap-2 sm:gap-4 relative justify-end">
       
       {hasDraft && (
-        <button type="button" onClick={clearDraft} className="text-xs font-bold text-gray-400 hover:text-red-500 transition-colors">
+        <button type="button" onClick={clearDraft} className="text-[11px] sm:text-xs font-bold text-gray-400 hover:text-red-500 transition-colors whitespace-nowrap">
           Clear Draft
         </button>
       )}
       
       {renderScheduleModal()}
 
-      {/* Ultra-Tight Apple Style Split Pill */}
-      <div className={`flex items-stretch bg-brand-orange rounded-full transition-all divide-x divide-white/20 overflow-hidden ${!isReadyToSubmit ? 'opacity-50 grayscale-[15%]' : 'shadow-sm hover:shadow-md hover:-translate-y-0.5'}`}>
+      {/* Ultra-Tight Apple Style Split Pill (Now with shrink-0) */}
+      <div className={`shrink-0 flex items-stretch bg-brand-orange rounded-full transition-all divide-x divide-white/20 overflow-hidden ${!isReadyToSubmit ? 'opacity-50 grayscale-[15%]' : 'shadow-sm hover:shadow-md hover:-translate-y-0.5'}`}>
         <button 
           type="button" 
           onClick={(e) => handleSubmit(e)} 
