@@ -6,8 +6,8 @@ const User = require("../models/userSchema");
 const sendAutoNotification = require('./notify');
 const Post = require('../models/postSchema');
 const SocialConnection = require('../models/SocialConnection');
-// Destructure the function from the formatters.js file
 const { formatHtmlForLinkedIn } = require('./formatters');
+const { uploadImageToLinkedIn } = require('./linkedinHelper');
 
 // ==========================================
 // HELPER: MARK AS NO-SHOW
@@ -172,8 +172,6 @@ const startAllCronJobs = (app) => {
   cron.schedule('* * * * *', async () => {
     try {
       const now = new Date();
-
-      // Find ANY posts that have a scheduled action due right now
       const duePosts = await Post.find({
         $or: [
           { status: "scheduled", scheduledFor: { $lte: now } },
@@ -192,7 +190,29 @@ const startAllCronJobs = (app) => {
           if (connection && connection.accessToken) {
             const plainTextContent = formatHtmlForLinkedIn(post.content || '');
             
+            // 🚨 UPDATED PAYLOAD GENERATOR
+            let specificContent = {
+              "com.linkedin.ugc.ShareContent": {
+                shareCommentary: { text: plainTextContent },
+                shareMediaCategory: "NONE"
+              }
+            };
+
             try {
+              // 🚨 NEW IMAGE PROCESSING LOGIC
+              if (post.images && post.images.length > 0) {
+                console.log(`Processing ${post.images.length} scheduled images for LinkedIn...`);
+                const uploadPromises = post.images.map(url => uploadImageToLinkedIn(url, connection.accessToken, connection.providerAccountId));
+                const assetUrns = await Promise.all(uploadPromises);
+
+                specificContent["com.linkedin.ugc.ShareContent"].shareMediaCategory = "IMAGE";
+                specificContent["com.linkedin.ugc.ShareContent"].media = assetUrns.map(urn => ({
+                  status: "READY",
+                  media: urn
+                }));
+              }
+
+              // 🚨 EXISTING POST LOGIC
               const linkedInRes = await fetch('https://api.linkedin.com/v2/ugcPosts', {
                 method: 'POST',
                 headers: {
@@ -203,12 +223,7 @@ const startAllCronJobs = (app) => {
                 body: JSON.stringify({
                   author: connection.providerAccountId,
                   lifecycleState: 'PUBLISHED',
-                  specificContent: {
-                    'com.linkedin.ugc.ShareContent': {
-                      shareCommentary: { text: plainTextContent },
-                      shareMediaCategory: 'NONE' // Text only (Image support to come!)
-                    }
-                  },
+                  specificContent: specificContent,
                   visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
                 })
               });
@@ -231,15 +246,14 @@ const startAllCronJobs = (app) => {
           modified = true;
         }
 
-        // --- B. HANDLE CUTE FEED PUBLISHING ---
+        // --- B. HANDLE CUTE FEED PUBLISHING (Unchanged) ---
         if (post.status === "scheduled" && post.scheduledFor && new Date(post.scheduledFor) <= now) {
           post.status = "published";
           if (post.distribution?.cute) post.distribution.cute.status = "posted";
-          post.createdAt = now; // 🚨 Resets the timestamp so it goes to the top of the feed!
+          post.createdAt = now; 
           modified = true;
         }
 
-        // Save the updated statuses to MongoDB
         if (modified) {
           await post.save();
           console.log(`✅ Processed auto-publishing for scheduled post: ${post._id}`);

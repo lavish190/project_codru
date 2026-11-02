@@ -6,6 +6,7 @@ const authenticate = require("../middleware/authenticate");
 const SocialConnection = require('../models/SocialConnection');
 const sendAutoNotification = require("../utils/notify");
 const { formatHtmlForLinkedIn } = require('../utils/formatters');
+const { uploadImageToLinkedIn } = require('../utils/linkedinHelper');
 const router = express.Router();
 const slugify = require('slugify');
 
@@ -14,7 +15,6 @@ const slugify = require('slugify');
 // ==========================================
 router.post("/posts", authenticate, async (req, res) => {
   try {
-    // Note: We now pull 'distribution' from req.body instead of 'scheduledFor'
     const { content, images, distribution } = req.body; 
     
     if (!content && (!images || images.length === 0)) {
@@ -22,7 +22,6 @@ router.post("/posts", authenticate, async (req, res) => {
     }
 
     // --- 1. BACKWARDS COMPATIBILITY LOGIC ---
-    // Extract the schedule date from the new distribution object for the root fields
     let postStatus = "published";
     let parsedDate = null;
     const cuteSchedule = distribution?.cute?.scheduledFor;
@@ -39,30 +38,50 @@ router.post("/posts", authenticate, async (req, res) => {
       userId: req.userId,
       content: content || "",
       images: images || [],
-      status: postStatus, // Legacy field kept alive!
-      scheduledFor: parsedDate, // Legacy field kept alive!
-      distribution: distribution || {} // New multi-platform tracker
+      status: postStatus, 
+      scheduledFor: parsedDate, 
+      distribution: distribution || {} 
     });
 
     await newPost.save();
 
-    // --- 3. UPDATE USER ARRAY (Your original logic!) ---
+    // --- 3. UPDATE USER ARRAY ---
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
     user.posts.push(newPost._id);
     await user.save();
 
-    // --- 4. LINKEDIN CROSS-POSTING LOGIC ---
-    // Only fire this if they toggled LinkedIn ON and want it posted NOW
+    // --- 4. LINKEDIN CROSS-POSTING LOGIC (Instant Post) ---
     if (distribution?.linkedin?.status === 'posted') {
       const connection = await SocialConnection.findOne({ userId: req.userId, provider: 'linkedin' });
       
       if (connection && connection.accessToken) {
-        // Strip HTML tags from your rich text editor before sending to LinkedIn
         const plainTextContent = formatHtmlForLinkedIn(content);
         
+        // 🚨 UPDATED PAYLOAD GENERATOR
+        let specificContent = {
+          "com.linkedin.ugc.ShareContent": {
+            shareCommentary: { text: plainTextContent },
+            shareMediaCategory: "NONE" 
+          }
+        };
+
         try {
+          // 🚨 NEW IMAGE PROCESSING LOGIC
+          if (images && images.length > 0) {
+            console.log(`Processing ${images.length} instant images for LinkedIn...`);
+            const uploadPromises = images.map(url => uploadImageToLinkedIn(url, connection.accessToken, connection.providerAccountId));
+            const assetUrns = await Promise.all(uploadPromises);
+
+            specificContent["com.linkedin.ugc.ShareContent"].shareMediaCategory = "IMAGE";
+            specificContent["com.linkedin.ugc.ShareContent"].media = assetUrns.map(urn => ({
+              status: "READY",
+              media: urn
+            }));
+          }
+
+          // 🚨 EXISTING POST LOGIC
           const linkedInRes = await fetch('https://api.linkedin.com/v2/ugcPosts', {
             method: 'POST',
             headers: {
@@ -73,12 +92,7 @@ router.post("/posts", authenticate, async (req, res) => {
             body: JSON.stringify({
               author: connection.providerAccountId,
               lifecycleState: 'PUBLISHED',
-              specificContent: {
-                'com.linkedin.ugc.ShareContent': {
-                  shareCommentary: { text: plainTextContent },
-                  shareMediaCategory: 'NONE' // Sending text-only for right now
-                }
-              },
+              specificContent: specificContent,
               visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
             })
           });
@@ -87,7 +101,6 @@ router.post("/posts", authenticate, async (req, res) => {
             const errData = await linkedInRes.json();
             console.error("LinkedIn Post Failed:", errData);
             
-            // Mark as failed in DB so the user knows it didn't go through
             newPost.distribution.linkedin.status = 'failed';
             newPost.distribution.linkedin.errorLog = errData.message || "API Error";
             await newPost.save();
