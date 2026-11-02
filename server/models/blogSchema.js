@@ -5,6 +5,11 @@ const blogSchema = new mongoose.Schema({
     type: String, 
     required: true 
   },
+  slug: { 
+    type: String, 
+    required: true, 
+    unique: true 
+  },
   summary: { 
     type: String, 
     required: true 

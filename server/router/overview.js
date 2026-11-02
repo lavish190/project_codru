@@ -19,7 +19,7 @@ router.get('/dashboard-overview', authenticate, async (req, res) => {
         const baseRole = req.user.role ? req.user.role.toLowerCase() : (req.user.Role ? req.user.Role.toLowerCase() : 'user');
         const isAdmin = req.user.isAdmin === true; 
         
-        // 🚨 DERIVED ROLES ENGINE
+        // DERIVED ROLES ENGINE
         const userRoles = [baseRole];
         if (isAdmin) userRoles.push('admin');
         if (req.user.isCuTeTeam) userRoles.push('cute_team');

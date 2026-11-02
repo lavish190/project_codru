@@ -7,6 +7,7 @@ const SocialConnection = require('../models/SocialConnection');
 const sendAutoNotification = require("../utils/notify");
 const { formatHtmlForLinkedIn } = require('../utils/formatters');
 const router = express.Router();
+const slugify = require('slugify');
 
 // ==========================================
 // 1. CREATE A POST (Supports Multi-Platform & Scheduling)
@@ -644,6 +645,8 @@ router.delete("/posts/images", authenticate, async (req, res) => {
   }
 });
 
+const slugify = require('slugify'); // 🚨 ADD THIS AT THE TOP
+
 // ==========================================
 // 11. CREATE BLOG & TRIGGER CLOUDFLARE BUILD
 // ==========================================
@@ -654,8 +657,14 @@ router.post("/blogs", authenticate, async (req, res) => {
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
+    // 🚨 GENERATE SEO SLUG
+    const baseSlug = slugify(title, { lower: true, strict: true });
+    const uniqueId = Math.random().toString(36).substring(2, 6);
+    const slug = `${baseSlug}-${uniqueId}`;
+
     const newBlog = new Blog({
       title,
+      slug, // 🚨 SAVE SLUG TO DB
       summary,
       content,
       coverImage,
@@ -679,22 +688,39 @@ router.post("/blogs", authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 12. EXPORT ALL BLOGS FOR CLOUDFLARE PYTHON SCRIPT
+// 12. EXPORT ALL BLOGS FOR CLOUDFLARE PYTHON SCRIPT (WITH AUTO-HEALING)
 // ==========================================
 router.get("/blogs/export", async (req, res) => {
   try {
     const blogs = await Blog.find().sort({ publishedAt: -1 });
     
-    const formattedBlogs = blogs.map(blog => ({
-      id: blog._id.toString(),
-      title: blog.title,
-      summary: blog.summary,
-      content: blog.content,
-      image: blog.coverImage,
-      date: blog.publishedAt.toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' }),
-      author: blog.authorName,
-      category: blog.category,
-      cta: blog.cta // 🚨 ADDED CTA EXPORT HERE
+    // 🚨 Use Promise.all to handle the async auto-healing saves
+    const formattedBlogs = await Promise.all(blogs.map(async (blog) => {
+      
+      let currentSlug = blog.slug;
+
+      // 🚨 AUTO-HEALING: If an old blog has no slug, make one and save it forever
+      if (!currentSlug) {
+        const baseSlug = slugify(blog.title, { lower: true, strict: true });
+        const uniqueId = Math.random().toString(36).substring(2, 6);
+        currentSlug = `${baseSlug}-${uniqueId}`;
+        
+        blog.slug = currentSlug;
+        await blog.save(); // Permanently fixes the old database entry!
+      }
+
+      return {
+        id: blog._id.toString(),
+        slug: currentSlug, // 🚨 EXPORT THE SLUG TO PYTHON
+        title: blog.title,
+        summary: blog.summary,
+        content: blog.content,
+        image: blog.coverImage,
+        date: blog.publishedAt.toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' }),
+        author: blog.authorName,
+        category: blog.category,
+        cta: blog.cta 
+      };
     }));
 
     res.status(200).json(formattedBlogs);
@@ -750,6 +776,5 @@ router.put("/blogs/:id", authenticate, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 module.exports = router;

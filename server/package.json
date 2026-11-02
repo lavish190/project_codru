@@ -35,6 +35,7 @@
     "pdfmake": "^0.3.11",
     "phonepe-pg-sdk-node": "^2.0.2",
     "server": "file:",
+    "slugify": "^1.6.9",
     "socket.io": "^4.8.3",
     "web-push": "^3.6.7",
     "xlsx": "^0.18.5"
