@@ -153,6 +153,49 @@ const toTitleCase = (str) => {
   return formattedStr.replace(/\s+/g, " ").trim();
 };
 
+const formatHtmlForLinkedIn = (html) => {
+  if (!html) return "";
+  let text = html;
+
+  // 1. Preserve paragraph breaks and explicit line breaks
+  text = text.replace(/<br\s*\/?>/gi, '\n');
+  text = text.replace(/<\/p>|<\/div>/gi, '\n\n');
+
+  // 2. Handle Ordered Lists (Numbers)
+  // This looks for <ol> blocks and dynamically numbers the <li> items inside
+  text = text.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (match, olContent) => {
+    let counter = 1;
+    return olContent.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (liMatch, liContent) => {
+      return `${counter++}. ${liContent}\n`;
+    }) + '\n';
+  });
+
+  // 3. Handle Unordered Lists (Bullets)
+  // Replaces <li> inside <ul> with clean bullet points
+  text = text.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (match, ulContent) => {
+    return ulContent.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '• $1\n') + '\n';
+  });
+
+  // Fallback for any stray <li> tags
+  text = text.replace(/<li[^>]*>/gi, '• ');
+  text = text.replace(/<\/li>/gi, '\n');
+
+  // 4. Decode common HTML entities that rich text editors use
+  text = text.replace(/&nbsp;/g, ' ');
+  text = text.replace(/&amp;/g, '&');
+  text = text.replace(/&lt;/g, '<');
+  text = text.replace(/&gt;/g, '>');
+
+  // 5. The Bulldozer: Now it's safe to strip all remaining formatting tags (<b>, <i>, <span>)
+  text = text.replace(/<[^>]+>/g, '');
+
+  // 6. Clean up: Ensure we never have more than 2 consecutive line breaks
+  text = text.replace(/\n{3,}/g, '\n\n');
+
+  return text.trim();
+};
+
 module.exports = {
-  toTitleCase
+  toTitleCase,
+  formatHtmlForLinkedIn
 };

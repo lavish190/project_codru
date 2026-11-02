@@ -50,7 +50,7 @@ const postSchema = new mongoose.Schema({
     required: true
   },
   
-  imageUrl: { type: String, default: "" }, 
+  images: { type: [String], default: [] },
   title: { type: String }, 
   content: { type: String, required: true }, 
 

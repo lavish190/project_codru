@@ -5,6 +5,7 @@ const User = require("../models/userSchema");
 const authenticate = require("../middleware/authenticate");
 const SocialConnection = require('../models/SocialConnection');
 const sendAutoNotification = require("../utils/notify");
+const { formatHtmlForLinkedIn } = require('../utils/formatters');
 const router = express.Router();
 
 // ==========================================
@@ -13,9 +14,9 @@ const router = express.Router();
 router.post("/posts", authenticate, async (req, res) => {
   try {
     // Note: We now pull 'distribution' from req.body instead of 'scheduledFor'
-    const { content, imageUrl, distribution } = req.body; 
+    const { content, images, distribution } = req.body; 
     
-    if (!content && !imageUrl) {
+    if (!content && (!images || images.length === 0)) {
       return res.status(400).json({ error: "Post must contain text or an image." });
     }
 
@@ -36,7 +37,7 @@ router.post("/posts", authenticate, async (req, res) => {
     const newPost = new Post({
       userId: req.userId,
       content: content || "",
-      imageUrl: imageUrl || "",
+      images: images || [],
       status: postStatus, // Legacy field kept alive!
       scheduledFor: parsedDate, // Legacy field kept alive!
       distribution: distribution || {} // New multi-platform tracker
@@ -58,7 +59,7 @@ router.post("/posts", authenticate, async (req, res) => {
       
       if (connection && connection.accessToken) {
         // Strip HTML tags from your rich text editor before sending to LinkedIn
-        const plainTextContent = content.replace(/<[^>]*>?/gm, ''); 
+        const plainTextContent = formatHtmlForLinkedIn(content);
         
         try {
           const linkedInRes = await fetch('https://api.linkedin.com/v2/ugcPosts', {
@@ -619,6 +620,31 @@ router.delete("/posts/:postId/comments/:commentId", authenticate, async (req, re
 });
 
 // ==========================================
+// DELETE ORPHANED CLOUDINARY IMAGES
+// ==========================================
+router.delete("/posts/images", authenticate, async (req, res) => {
+  try {
+    const { urls } = req.body;
+    if (!urls || urls.length === 0) return res.status(400).json({ message: "No URLs provided" });
+
+    const deletePromises = urls.map(async (url) => {
+      // Cloudinary URLs look like: https://res.cloudinary.com/name/image/upload/v1234/folder/image.jpg
+      // This regex extracts 'folder/image' (the exact public_id needed for deletion)
+      const match = url.match(/\/v\d+\/(.+)\.[a-z]+$/i);
+      if (match && match[1]) {
+        return cloudinary.uploader.destroy(match[1]);
+      }
+    });
+
+    await Promise.all(deletePromises);
+    res.status(200).json({ message: "Images successfully purged from Cloudinary" });
+  } catch (err) {
+    console.error("Cloudinary Cleanup Error:", err);
+    res.status(500).json({ error: "Failed to delete images" });
+  }
+});
+
+// ==========================================
 // 11. CREATE BLOG & TRIGGER CLOUDFLARE BUILD
 // ==========================================
 router.post("/blogs", authenticate, async (req, res) => {
@@ -724,5 +750,6 @@ router.put("/blogs/:id", authenticate, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 module.exports = router;

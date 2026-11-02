@@ -5,6 +5,9 @@ const Booking = require("../models/bookingSchema");
 const User = require("../models/userSchema");
 const sendAutoNotification = require('./notify');
 const Post = require('../models/postSchema');
+const SocialConnection = require('../models/SocialConnection');
+// Destructure the function from the formatters.js file
+const { formatHtmlForLinkedIn } = require('./formatters');
 
 // ==========================================
 // HELPER: MARK AS NO-SHOW
@@ -169,19 +172,78 @@ const startAllCronJobs = (app) => {
   cron.schedule('* * * * *', async () => {
     try {
       const now = new Date();
-      // Find posts scheduled for the past or present that are still hidden
-      const result = await Post.updateMany(
-        { status: "scheduled", scheduledFor: { $lte: now } },
-        { 
-          $set: { 
-            status: "published", 
-            createdAt: now // 🚨 Resets the timestamp so it goes to the top of the feed!
-          } 
-        }
-      );
 
-      if (result.modifiedCount > 0) {
-        console.log(`✅ Auto-published ${result.modifiedCount} scheduled post(s)!`);
+      // Find ANY posts that have a scheduled action due right now
+      const duePosts = await Post.find({
+        $or: [
+          { status: "scheduled", scheduledFor: { $lte: now } },
+          { "distribution.linkedin.status": "scheduled", "distribution.linkedin.scheduledFor": { $lte: now } }
+        ]
+      });
+
+      for (const post of duePosts) {
+        let modified = false;
+
+        // --- A. HANDLE LINKEDIN PUBLISHING ---
+        if (post.distribution?.linkedin?.status === "scheduled" && new Date(post.distribution.linkedin.scheduledFor) <= now) {
+          
+          const connection = await SocialConnection.findOne({ userId: post.userId, provider: 'linkedin' });
+          
+          if (connection && connection.accessToken) {
+            const plainTextContent = formatHtmlForLinkedIn(post.content || '');
+            
+            try {
+              const linkedInRes = await fetch('https://api.linkedin.com/v2/ugcPosts', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${connection.accessToken}`,
+                  'Content-Type': 'application/json',
+                  'X-Restli-Protocol-Version': '2.0.0'
+                },
+                body: JSON.stringify({
+                  author: connection.providerAccountId,
+                  lifecycleState: 'PUBLISHED',
+                  specificContent: {
+                    'com.linkedin.ugc.ShareContent': {
+                      shareCommentary: { text: plainTextContent },
+                      shareMediaCategory: 'NONE' // Text only (Image support to come!)
+                    }
+                  },
+                  visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
+                })
+              });
+
+              if (linkedInRes.ok) {
+                post.distribution.linkedin.status = "posted";
+              } else {
+                const errData = await linkedInRes.json();
+                post.distribution.linkedin.status = "failed";
+                post.distribution.linkedin.errorLog = errData.message;
+              }
+            } catch (err) {
+              post.distribution.linkedin.status = "failed";
+              post.distribution.linkedin.errorLog = err.message;
+            }
+          } else {
+            post.distribution.linkedin.status = "failed";
+            post.distribution.linkedin.errorLog = "LinkedIn token not found or expired.";
+          }
+          modified = true;
+        }
+
+        // --- B. HANDLE CUTE FEED PUBLISHING ---
+        if (post.status === "scheduled" && post.scheduledFor && new Date(post.scheduledFor) <= now) {
+          post.status = "published";
+          if (post.distribution?.cute) post.distribution.cute.status = "posted";
+          post.createdAt = now; // 🚨 Resets the timestamp so it goes to the top of the feed!
+          modified = true;
+        }
+
+        // Save the updated statuses to MongoDB
+        if (modified) {
+          await post.save();
+          console.log(`✅ Processed auto-publishing for scheduled post: ${post._id}`);
+        }
       }
     } catch (error) {
       console.error("Scheduled Post Cron Error:", error);

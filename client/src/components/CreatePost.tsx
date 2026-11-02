@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Image as ImageIcon, X, Loader2, Send, Clock, Maximize2, Minimize2, CheckCircle2, Globe} from "lucide-react";
+import { Image as ImageIcon, X, Loader2, Send, Clock, Maximize2, Minimize2, CheckCircle2, Trash2, Globe, ChevronLeft, ChevronRight, MoveLeft, MoveRight, Plus} from "lucide-react";
 import Muialert from "./Muialert";
 import { UserData } from "../App";
 import RichTextEditor from "./RichTextEditor";
@@ -18,8 +18,9 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const [content, setContent] = useState(() => localStorage.getItem(DRAFT_KEY) || "");
   const [isContentEmpty, setIsContentEmpty] = useState(!content);
   
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  // Replace imageFiles and imagePreviews with this single state:
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
   
   // --- NEW SCHEDULING STATE INIT ---
   const savedScheduleRaw = localStorage.getItem(SCHEDULE_DRAFT_KEY);
@@ -45,6 +46,9 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
   const [isUploading, setIsUploading] = useState(false);
   const [alert, setAlert] = useState({ show: false, message: "", type: "success" as "success" | "error" });
+
+  // NEW: Tracks which image is open in the full-screen viewer (null means closed)
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -90,7 +94,18 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           setHasDraft(true);
         }
       }
-      // Add this right next to where you load the saved text and schedule:
+      
+      const savedImagesRaw = localStorage.getItem(`cute_post_images_draft_${userData._id}`);
+      if (savedImagesRaw) {
+        try {
+          const parsedUrls = JSON.parse(savedImagesRaw);
+          setImageUrls(parsedUrls);
+          setHasDraft(true);
+        } catch (e) {
+          console.error("Failed to parse saved images");
+        }
+      }
+
       const savedLinkedIn = localStorage.getItem(`cute_post_linkedin_draft_${userData._id}`);
       if (savedLinkedIn === "true") {
         setPostToLinkedIn(true);
@@ -154,39 +169,144 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   }
 };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => setImagePreview(reader.result as string);
-      reader.readAsDataURL(file);
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const allowedFiles = files.slice(0, 9 - imageUrls.length);
+    setIsUploadingImages(true);
+
+    try {
+      const uploadPromises = allowedFiles.map(async (file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("upload_preset", "cute_profiles"); 
+        formData.append("cloud_name", "da6jhcsmm");       
+
+        const res = await fetch("https://api.cloudinary.com/v1_1/da6jhcsmm/image/upload", { method: "POST", body: formData });
+        if (!res.ok) throw new Error("Upload failed");
+        const data = await res.json();
+        return data.secure_url;
+      });
+
+      const newUrls = await Promise.all(uploadPromises);
+      
+      setImageUrls((prev) => {
+        const updated = [...prev, ...newUrls];
+        // Save the simple, lightweight URLs to localStorage
+        localStorage.setItem(`cute_post_images_draft_${userData?._id}`, JSON.stringify(updated));
+        setHasDraft(true);
+        return updated;
+      });
+    } catch (err) {
+      setAlert({ show: true, message: "Failed to upload images", type: "error" });
+    } finally {
+      setIsUploadingImages(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  const removeImage = () => {
-    setImageFile(null);
-    setImagePreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const deleteImagesFromCloudinary = async (urlsToDelete: string[]) => {
+    if (urlsToDelete.length === 0) return;
+    try {
+      await fetch(`${import.meta.env.VITE_API}posts/images`, {
+        method: "DELETE",
+        headers: { 
+          "Content-Type": "application/json", 
+          "Authorization": `Bearer ${localStorage.getItem("jwtoken")}` 
+        },
+        body: JSON.stringify({ urls: urlsToDelete })
+      });
+    } catch (err) {
+      console.error("Cleanup failed", err);
+    }
+  };
+
+  const removeImage = (indexToRemove: number) => {
+    // 1. Purge from Cloudinary
+    const urlToDelete = imageUrls[indexToRemove];
+    deleteImagesFromCloudinary([urlToDelete]); 
+
+    // 2. Remove from frontend state and local storage
+    setImageUrls((prev) => {
+      const updated = prev.filter((_, index) => index !== indexToRemove);
+      if (updated.length > 0) {
+        localStorage.setItem(`cute_post_images_draft_${userData?._id}`, JSON.stringify(updated));
+      } else {
+        localStorage.removeItem(`cute_post_images_draft_${userData?._id}`);
+        // Only clear the "Saved" badge if there's also no text
+        if (isContentEmpty) setHasDraft(false);
+      }
+      return updated;
+    });
   };
 
   const clearDraft = () => {
+    // 1. Purge ALL active images from Cloudinary
+    deleteImagesFromCloudinary(imageUrls); 
+
+    // 2. Clear all your original storage keys (Kept your exact constants!)
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SCHEDULE_DRAFT_KEY);
-    localStorage.removeItem(LINKEDIN_DRAFT_KEY);
+    localStorage.removeItem(LINKEDIN_DRAFT_KEY); 
+    localStorage.removeItem(`cute_post_images_draft_${userData?._id}`); // New key for images
+    
+    // 3. Reset all your original states
     setContent("");
     setIsContentEmpty(true);
     setScheduleConfig({ isScheduled: false, syncTimes: true, times: { cute: "", linkedin: "" } });
     setShowScheduleModal(false);
     setPostToLinkedIn(false);
     setHasDraft(false);
-    removeImage();
+    
+    // 4. Reset the new unified image array
+    setImageUrls([]);
+  };
+
+  const nextViewerImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setViewerIndex((prev) => (prev !== null && prev < imageUrls.length - 1 ? prev + 1 : prev));
+  };
+
+  const prevViewerImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setViewerIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
+  };
+
+  // Swaps the image position and keeps the viewer focused on it
+  const moveImage = (e: React.MouseEvent, index: number, direction: "left" | "right") => {
+    e.stopPropagation(); // 🚨 This stops the viewer from closing!
+    
+    const newIndex = direction === "left" ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= imageUrls.length) return;
+
+    const reorder = <T,>(list: T[]) => {
+      const arr = [...list];
+      [arr[index], arr[newIndex]] = [arr[newIndex], arr[index]];
+      return arr;
+    };
+
+    setImageUrls(reorder(imageUrls));
+    setViewerIndex(newIndex);
+  };
+
+  // Safely deletes from the viewer and shifts the focus
+  const removeImageFromViewer = (e: React.MouseEvent) => {
+    e.stopPropagation(); // 🚨 Stop this from closing too!
+    if (viewerIndex === null) return;
+    removeImage(viewerIndex);
+    if (imageUrls.length <= 1) {
+      setViewerIndex(null);
+    } else if (viewerIndex >= imageUrls.length - 1) {
+      setViewerIndex(viewerIndex - 1);
+    }
   };
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    if (isContentEmpty && !imageFile) {
+    // 1. Validation check uses imageFiles.length
+    if (isContentEmpty && imageUrls.length === 0) {
       return setAlert({ show: true, message: "Please add some text or an image!", type: "error" });
     }
 
@@ -201,24 +321,14 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     }
 
     setIsUploading(true);
-    let finalImageUrl = "";
+    let finalImageUrls: string[] = []; // Array instead of string
 
     try {
-      if (imageFile) {
-        const formData = new FormData();
-        formData.append("file", imageFile);
-        formData.append("upload_preset", "cute_profiles"); 
-        formData.append("cloud_name", "da6jhcsmm");       
-
-        const cloudinaryRes = await fetch("https://api.cloudinary.com/v1_1/da6jhcsmm/image/upload", { method: "POST", body: formData });
-        if (!cloudinaryRes.ok) throw new Error("Failed to upload image");
-        finalImageUrl = (await cloudinaryRes.json()).secure_url;
-      }
+      
 
       const token = localStorage.getItem("jwtoken");
       if (!token) return navigate("/signin");
 
-      // Build the distribution payload based on our new Mongoose schema
       const distribution = {
         cute: {
           status: scheduleConfig.isScheduled ? 'scheduled' : 'posted',
@@ -235,8 +345,8 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({
           content,
-          imageUrl: finalImageUrl, 
-          distribution // Send the new object instead of the old scheduledFor string
+          images: finalImageUrls, // 3. Send the array matching our new backend schema!
+          distribution 
         }),
       });
 
@@ -254,7 +364,7 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     }
   };
 
-  const isReadyToSubmit = !isUploading && (!isContentEmpty || imageFile) && (!scheduleConfig.isScheduled || (scheduleConfig.isScheduled && !!scheduleConfig.times.cute));
+  const isReadyToSubmit = !isUploading && (!isContentEmpty || imageUrls.length > 0) && (!scheduleConfig.isScheduled || (scheduleConfig.isScheduled && !!scheduleConfig.times.cute));
 
   // --- SUB-COMPONENTS ---
   const renderScheduleModal = () => {
@@ -302,15 +412,15 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   };
 
   const renderActionToolbar = (layout: "compact" | "expanded") => (
-  <div className={`flex items-center justify-between ${layout === "compact" ? "ml-16 mt-4" : "mt-6"} relative`}>
+  <div className={`flex items-center justify-between ${layout === "compact" ? "mt-4 ml-0 sm:ml-16" : "mt-6"} relative`}>
     
     {/* LEFT SIDE: Attachments & Socials */}
-    <div className="flex items-center gap-2">
-      <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 text-brand-blue hover:text-brand-orange hover:bg-orange-50 px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 text-sm" disabled={isUploading}>
+    <div className="flex items-center gap-1 sm:gap-2">
+      <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 text-brand-blue hover:text-brand-orange hover:bg-orange-50 px-2 sm:px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 text-sm" disabled={isUploading}>
         <ImageIcon className="w-4 h-4" />
         <span className="hidden sm:inline">Photo</span>
       </button>
-      <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleImageSelect} />
+      <input type="file" accept="image/*" multiple ref={fileInputRef} className="hidden" onChange={handleImageSelect} />
 
       {/* Upward Hover/Click Socials Menu */}
       <div 
@@ -318,7 +428,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
         onMouseEnter={() => setIsSocialMenuOpen(true)}
         onMouseLeave={() => setIsSocialMenuOpen(false)}
       >
-        {/* Main Trigger Icon */}
         <button 
           type="button" 
           onClick={() => setIsSocialMenuOpen((prev) => !prev)}
@@ -327,16 +436,14 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           {postToLinkedIn ? <LinkedinIcon className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
         </button>
         
-        {/* Invisible bridge so the mouse doesn't fall off the hover target */}
         <div className="absolute bottom-full w-full h-3"></div>
 
-        {/* The Upward Expanding Capsule */}
         <div className={`absolute bottom-[calc(100%+0.25rem)] flex flex-col gap-2 bg-white border border-gray-100 shadow-xl rounded-full p-1.5 transition-all duration-200 z-20 ${isSocialMenuOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-2'}`}>
           <button 
             type="button" 
             onClick={() => {
               handleLinkedInToggle();
-              setIsSocialMenuOpen(false); // Closes automatically when tapped
+              setIsSocialMenuOpen(false);
             }}
             className={`p-2 rounded-full transition-colors flex items-center justify-center ${postToLinkedIn ? 'bg-blue-50 text-[#0A66C2]' : 'text-gray-400 hover:text-[#0A66C2] hover:bg-blue-50'}`}
             title={isLinkedInConnected ? (postToLinkedIn ? "Disable LinkedIn" : "Enable LinkedIn") : "Connect LinkedIn"}
@@ -345,27 +452,27 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           </button>
         </div>
       </div>
-      
     </div>
 
-    {/* RIGHT SIDE: Clear Draft & Post Actions */}
-    <div className="flex items-center gap-2 sm:gap-4 relative justify-end">
+    {/* RIGHT SIDE: Post Actions */}
+    <div className="flex items-center gap-3 sm:gap-4 relative justify-end">
       
+      {/* DESKTOP ONLY: Text-based Clear Draft */}
       {hasDraft && (
-        <button type="button" onClick={clearDraft} className="text-[11px] sm:text-xs font-bold text-gray-400 hover:text-red-500 transition-colors whitespace-nowrap">
+        <button type="button" onClick={clearDraft} className="hidden sm:block text-xs font-bold text-gray-400 hover:text-red-500 transition-colors whitespace-nowrap">
           Clear Draft
         </button>
       )}
-      
+
       {renderScheduleModal()}
 
-      {/* Ultra-Tight Apple Style Split Pill (Now with shrink-0) */}
+      {/* Ultra-Tight Apple Style Split Pill */}
       <div className={`shrink-0 flex items-stretch bg-brand-orange rounded-full transition-all divide-x divide-white/20 overflow-hidden ${!isReadyToSubmit ? 'opacity-50 grayscale-[15%]' : 'shadow-sm hover:shadow-md hover:-translate-y-0.5'}`}>
         <button 
           type="button" 
           onClick={(e) => handleSubmit(e)} 
           disabled={!isReadyToSubmit} 
-          className="text-white pl-4 pr-2.5 py-1.5 text-sm font-bold flex items-center gap-1.5 transition-colors disabled:cursor-not-allowed hover:bg-orange-600 disabled:hover:bg-transparent"
+          className="text-white pl-4 pr-2.5 py-1.5 text-[13px] sm:text-sm font-bold flex items-center gap-1.5 transition-colors disabled:cursor-not-allowed hover:bg-orange-600 disabled:hover:bg-transparent"
         >
           {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           <span>{scheduleConfig.isScheduled ? "Schedule" : "Post"}</span>
@@ -389,33 +496,77 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   return (
     <>
       {/* COMPACT MODE */}
-      <div className={`max-w-2xl mx-auto bg-white rounded-3xl shadow-xl border border-gray-100 p-6 relative ${isExpanded ? 'hidden' : 'block'}`}>
-        <div className="absolute top-6 right-6 flex items-center gap-3 z-10">
+      <div className={`max-w-2xl mx-auto bg-white rounded-3xl shadow-xl border border-gray-100 p-4 sm:p-6 relative ${isExpanded ? 'hidden' : 'block'}`}>
+        
+        {/* Top Right Badges (No longer overlapping!) */}
+        <div className="absolute top-5 right-5 sm:top-6 sm:right-6 flex items-center gap-2 z-10">
           {hasDraft && (
-            <span className="flex items-center gap-1 text-xs font-bold text-green-500 bg-green-50 px-2.5 py-1 rounded-full animate-in fade-in">
-              <CheckCircle2 className="w-3 h-3" /> Saved
+            <span className="flex items-center gap-1 text-[10px] sm:text-xs font-bold text-green-500 bg-green-50 px-2 py-1 rounded-full animate-in fade-in">
+              <CheckCircle2 className="w-3 h-3" /> <span className="hidden sm:inline">Saved</span>
             </span>
           )}
-          <button onClick={() => setIsExpanded(true)} className="text-gray-400 hover:text-brand-blue transition-colors" title="Expand Editor">
-            <Maximize2 className="w-5 h-5" />
+          <button onClick={() => setIsExpanded(true)} className="text-gray-400 hover:text-brand-blue transition-colors ml-1" title="Expand Editor">
+            <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
-        <h2 className="text-2xl font-display font-bold text-brand-blue mb-6">Create a CuTe Post</h2>
-        <div className="flex gap-4">
-          <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border-2 border-brand-orange/20">
+        
+        {/* The pr-[90px] padding forces title wrapping on mobile, protecting the top-right icons */}
+        <h2 className="text-xl sm:text-2xl font-display font-bold text-brand-blue mb-4 sm:mb-6 pr-[90px] sm:pr-0">Create a CuTe Post</h2>
+        
+        <div className="flex gap-3 sm:gap-4">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shrink-0 border-2 border-brand-orange/20">
             {userData?.Photo ? <img src={userData.Photo} alt="Profile" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-brand-orange text-white flex items-center justify-center font-bold">{userData?.Name?.charAt(0).toUpperCase() || "U"}</div>}
           </div>
-          <div className="w-full bg-slate-50 border border-gray-200 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-brand-orange/50 focus-within:border-brand-orange transition-all h-32 flex">
+          
+          <div className="relative w-full bg-slate-50 border border-gray-200 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-brand-orange/50 focus-within:border-brand-orange transition-all h-28 sm:h-32 flex">
             <RichTextEditor value={content} onChange={handleContentChange} showToolbar={false} />
+            
+            {/* MOBILE ONLY: Contextual Floating Trash Icon inside the editor */}
+            {hasDraft && (
+              <button 
+                type="button" 
+                onClick={clearDraft} 
+                className="absolute bottom-2 right-2 sm:hidden bg-white border border-gray-200 text-gray-400 hover:text-red-500 p-1.5 rounded-lg shadow-sm transition-colors z-10"
+                title="Clear Draft"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
-        {imagePreview && (
-          <div className="relative ml-16 mt-3 rounded-2xl overflow-hidden shadow-sm border border-gray-100 inline-block max-w-full">
-            <img src={imagePreview} alt="Preview" className="max-h-80 object-contain" />
-            <button type="button" onClick={removeImage} className="absolute top-2 right-2 bg-gray-900/60 hover:bg-red-500 text-white p-1.5 rounded-full backdrop-blur-sm transition-colors"><X className="w-4 h-4" /></button>
+        {imageUrls.length > 0 && (
+          <div 
+            className="flex gap-3 overflow-x-auto py-2 ml-0 sm:ml-16 mt-3 snap-x hide-scrollbar"
+            onWheel={(e) => {
+              // Magically converts vertical mouse wheel into horizontal scrolling!
+              if (e.deltaY !== 0) {
+                e.currentTarget.scrollLeft += e.deltaY;
+              }
+            }}
+          >
+            {imageUrls.map((preview, index) => (
+              <div key={index} className="relative shrink-0 snap-center rounded-2xl overflow-hidden shadow-sm border border-gray-100 bg-slate-50 w-40 h-40 sm:w-48 sm:h-48 group">
+                {/* Inside your imagePreviews.map block, update the <img> tag to this: */}
+                <img 
+                  src={preview} 
+                  alt={`Preview ${index + 1}`} 
+                  className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" 
+                  onClick={() => setViewerIndex(index)}
+                />
+                <button 
+                  type="button" 
+                  onClick={(e) => { e.stopPropagation(); removeImage(index); }} 
+                  className="absolute top-2 right-2 bg-gray-900/60 hover:bg-red-500 text-white p-1.5 rounded-full backdrop-blur-sm transition-colors z-10 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                 
+              </div>
+            ))}
           </div>
         )}
+        
         {renderActionToolbar("compact")}
       </div>
 
@@ -450,12 +601,37 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
             </div>
 
             <div className="space-y-4 shrink-0">
-              {imagePreview && (
-                <div className="relative rounded-2xl overflow-hidden shadow-sm border border-gray-100 inline-block max-w-full bg-slate-50">
-                  <img src={imagePreview} alt="Preview" className="max-h-[50vh] object-contain" />
-                  <button type="button" onClick={removeImage} className="absolute top-4 right-4 bg-gray-900/60 hover:bg-red-500 text-white p-2 rounded-full backdrop-blur-sm transition-colors"><X className="w-5 h-5" /></button>
-                </div>
-              )}
+              {imageUrls.length > 0 && (
+              <div 
+                className="flex gap-3 overflow-x-auto py-2 ml-0 sm:ml-16 mt-3 snap-x hide-scrollbar"
+                onWheel={(e) => {
+                  // Magically converts vertical mouse wheel into horizontal scrolling!
+                  if (e.deltaY !== 0) {
+                    e.currentTarget.scrollLeft += e.deltaY;
+                  }
+                }}
+              >
+                {imageUrls.map((preview, index) => (
+                  <div key={index} className="relative shrink-0 snap-center rounded-2xl overflow-hidden shadow-sm border border-gray-100 bg-slate-50 w-40 h-40 sm:w-48 sm:h-48 group">
+                    {/* Inside your imageUrls.map block, update the <img> tag to this: */}
+                    <img 
+                      src={preview} 
+                      alt={`Preview ${index + 1}`} 
+                      className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" 
+                      onClick={() => setViewerIndex(index)}
+                    />
+                    <button 
+                      type="button" 
+                      onClick={(e) => { e.stopPropagation(); removeImage(index); }} 
+                      className="absolute top-2 right-2 bg-gray-900/60 hover:bg-red-500 text-white p-1.5 rounded-full backdrop-blur-sm transition-colors z-10 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  
+                  </div>
+                ))}
+              </div>
+            )}
             </div>
             <div className="mt-auto pt-6 pb-8 shrink-0">
               {renderActionToolbar("expanded")}
@@ -467,6 +643,94 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       {alert.show && (
         <div className={`mt-4 ${isExpanded ? 'fixed bottom-4 left-1/2 -translate-x-1/2 z-[10000] w-full max-w-md px-4' : ''}`}>
           <Muialert message={alert.message} severity={alert.type} onClose={() => setAlert({ ...alert, show: false })} />
+        </div>
+      )}
+
+      {/* ==========================================
+          FULL SCREEN APPLE-STYLE IMAGE VIEWER 
+      ========================================== */}
+      {viewerIndex !== null && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-200" onClick={() => setViewerIndex(null)}>
+          
+          {/* Top Bar: Controls & Close Button */}
+          <div className="absolute top-0 left-0 right-0 p-4 sm:p-6 flex justify-between items-center z-20 bg-gradient-to-b from-black/80 to-transparent">
+            
+            {/* Left Side: Counter & Sorting/Adding Controls */}
+            <div className="flex items-center gap-4 sm:gap-6">
+              <span className="text-white/90 font-medium text-sm sm:text-base tracking-widest bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md">
+                {viewerIndex + 1} / {imageUrls.length}
+              </span>
+              
+              <div className="flex items-center gap-1 sm:gap-2 bg-black/40 rounded-full p-1 backdrop-blur-md">
+                <button onClick={(e) => moveImage(e, viewerIndex, "left")} disabled={viewerIndex === 0} className="p-2 text-white disabled:text-white/20 hover:bg-white/20 rounded-full transition-colors" title="Move Left">
+                  <MoveLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+                <button onClick={(e) => moveImage(e, viewerIndex, "right")} disabled={viewerIndex === imageUrls.length - 1} className="p-2 text-white disabled:text-white/20 hover:bg-white/20 rounded-full transition-colors" title="Move Right">
+                  <MoveRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              </div>
+
+              {imageUrls.length < 9 && (
+                <button onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }} className="flex items-center gap-1.5 text-sm font-medium text-white bg-brand-orange hover:bg-orange-600 px-3 py-1.5 rounded-full transition-colors shadow-lg">
+                  <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Photo</span>
+                </button>
+              )}
+            </div>
+
+            {/* Right Side: Delete & Close */}
+            <div className="flex items-center gap-2 sm:gap-4">
+              <button onClick={(e) => removeImageFromViewer(e)} className="text-white/80 hover:text-red-500 transition-colors p-2 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-md" title="Delete Photo">
+                <Trash2 className="w-5 h-5 sm:w-5 sm:h-5" />
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); setViewerIndex(null); }} className="text-white hover:text-brand-orange transition-colors p-2 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-md">
+                <X className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+            </div>
+          </div>
+
+          {/* Previous Button */}
+          {viewerIndex > 0 && (
+            <button 
+              onClick={prevViewerImage}
+              className="absolute left-2 sm:left-8 text-white p-3 sm:p-4 rounded-full bg-white/5 hover:bg-white/20 backdrop-blur-md transition-all hover:scale-110 z-10"
+            >
+              <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
+            </button>
+          )}
+
+          {/* Main Focused Image */}
+          <div className="relative w-full max-w-6xl px-16 sm:px-28 flex justify-center items-center h-full" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src={imageUrls[viewerIndex]} 
+              alt="Full screen view" 
+              className="max-h-[75vh] sm:max-h-[85vh] max-w-full object-contain rounded-md shadow-2xl animate-in zoom-in-95 duration-200"
+            />
+          </div>
+
+          {/* Next Button */}
+          {viewerIndex < imageUrls.length - 1 && (
+            <button 
+              onClick={nextViewerImage}
+              className="absolute right-2 sm:right-8 text-white p-3 sm:p-4 rounded-full bg-white/5 hover:bg-white/20 backdrop-blur-md transition-all hover:scale-110 z-10"
+            >
+              <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
+            </button>
+          )}
+
+          {/* Bottom Desktop Thumbnail Strip (The "Left and Right" preview) */}
+          {imageUrls.length > 1 && (
+            <div className="absolute bottom-6 sm:bottom-8 left-0 right-0 flex justify-center gap-2 sm:gap-3 px-4 z-10" onClick={(e) => e.stopPropagation()}>
+              {imageUrls.map((thumb, idx) => (
+                <button 
+                  key={idx} 
+                  onClick={() => setViewerIndex(idx)}
+                  className={`h-12 w-12 sm:h-16 sm:w-16 rounded-lg overflow-hidden transition-all duration-300 shadow-lg ${viewerIndex === idx ? 'ring-2 ring-brand-orange scale-110 opacity-100' : 'opacity-40 hover:opacity-100 hover:-translate-y-1'}`}
+                >
+                  <img src={thumb} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </>
