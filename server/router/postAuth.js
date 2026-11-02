@@ -645,8 +645,6 @@ router.delete("/posts/images", authenticate, async (req, res) => {
   }
 });
 
-const slugify = require('slugify'); // 🚨 ADD THIS AT THE TOP
-
 // ==========================================
 // 11. CREATE BLOG & TRIGGER CLOUDFLARE BUILD
 // ==========================================
