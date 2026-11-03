@@ -36,7 +36,7 @@ export default function PostCard({
   const images = post.images?.length > 0 ? post.images : (post.imageUrl ? [post.imageUrl] : []);
 
   return (
-    <article className="bg-white sm:rounded-3xl shadow-sm sm:border border-y border-gray-100 overflow-hidden mb-2 sm:mb-6 -mx-4 sm:mx-0">
+    <article className={`bg-white sm:rounded-3xl shadow-sm sm:border border-y border-gray-100 overflow-hidden mb-2 sm:mb-6 ${isSingleView ? "w-full border-x" : "-mx-4 sm:mx-0"}`}>
       
       {/* 1. Header */}
       <div className="flex items-center justify-between p-3 sm:p-4">
@@ -74,7 +74,7 @@ export default function PostCard({
       </div>
 
       {/* 2. Content */}
-      <div className="px-3 sm:px-4 pb-2" onClick={() => !isSingleView && navigate(`/post/${post.slug || post._id}`)}>
+      <div className="px-3 sm:px-4 pb-2">
         <PostRenderer content={post.content} />
       </div>
 

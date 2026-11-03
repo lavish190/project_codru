@@ -30,6 +30,7 @@ import PaymentHistory from "./components/PaymentHistory";
 import PaymentStatus from "./components/PaymentStatus";
 import EnrollPage from "./components/Enrol";
 import AdmissionPortal from "./components/Admission/AdmissionPortal";
+import Explore from "./components/Explore";
 
 // --- TYPESCRIPT DEFINITIONS ---
 export interface UserData {
@@ -590,6 +591,18 @@ function App() {
                   userData={userData}
                 />
               }
+            />
+
+            <Route 
+              path="/explore" 
+              element={
+                <Explore 
+                  currentUser={{ 
+                    id: localStorage.getItem("userId"), 
+                    photo: userData?.Photo 
+                  }} 
+                />
+              } 
             />
 
             <Route

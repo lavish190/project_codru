@@ -729,6 +729,44 @@ router.delete("/posts/images", authenticate, async (req, res) => {
 });
 
 // ==========================================
+// SEARCH / EXPLORE ROUTE
+// GET /api/search?q=keyword
+// ==========================================
+router.get("/search", authenticate, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.status(200).json({ users: [], posts: [] });
+
+    // 1. Clean the search term (remove # if they searched for a hashtag specifically)
+    const searchTerm = q.replace(/^#/, '');
+
+    // 2. Search Users (Matches name or username)
+    const users = await User.find({
+      $or: [
+        { name: { $regex: searchTerm, $options: "i" } },
+        { username: { $regex: searchTerm, $options: "i" } }
+      ]
+    }).select("name username photo").limit(10);
+
+    // 3. Search Posts (Matches text content or hashtags)
+    const posts = await Post.find({
+      status: { $ne: "scheduled" },
+      content: { $regex: searchTerm, $options: "i" }
+    })
+      .populate("userId", "name username photo")
+      .populate("likedBy", "name username photo")
+      .populate({ path: "comments", select: "_id" }) // Just get comment count for feed
+      .sort({ createdAt: -1 })
+      .limit(20);
+
+    res.status(200).json({ users, posts });
+  } catch (err) {
+    console.error("Search Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
 // EXPORT ALL POSTS FOR CLOUDFLARE PYTHON SCRIPT (WITH AUTO-HEALING)
 // ==========================================
 router.get("/posts/export", async (req, res) => {
