@@ -139,52 +139,99 @@ router.post("/posts", authenticate, async (req, res) => {
 // ==========================================
 // 2. FETCH ALL POSTS (WITH NESTED REPLIES)
 // ==========================================
+// ==========================================
+// 2. SCALABLE FEED (Pagination & DB Sorting)
+// ==========================================
 router.get("/posts", authenticate, async (req, res) => {
   try {
-    // 1. Get the current user to find out who they are following
     const userId = req.userId || req.user._id;
-    const currentUser = await User.findById(userId).select("following");
     
-    // Convert ObjectIds to strings for easy comparison
-    const followingIds = currentUser.following.map(id => id.toString());
+    // Pagination setup (Defaults to page 1, 20 posts per page)
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20; 
+    const skip = (page - 1) * limit;
 
-    // 2 This ensures all old posts (with no status field) stay visible!
-    const allPosts = await Post.find({ status: { $ne: "scheduled" } })
+    const currentUser = await User.findById(userId).select("following");
+    const followingIds = currentUser.following || [];
+    // Combine following IDs with the user's own ID so they see their own posts too
+    const priorityUserIds = [...followingIds, userId]; 
+
+    // 1. FAST DB QUERY: Fetch only 20 Followed/Own posts
+    let followedPosts = await Post.find({ 
+        status: { $ne: "scheduled" },
+        userId: { $in: priorityUserIds } 
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .populate({
         path: "comments",
-        populate: { 
-          path: "user replies.user", 
-          select: "name username photo" 
-        }
+        populate: { path: "user replies.user", select: "name username photo" }
       })
       .populate("userId", "name username photo")
-      .populate("likedBy", "name username photo")
-      .sort({ createdAt: -1 });
+      .populate("likedBy", "name username photo");
 
-    // 3. The Sorting Magic: Split into "Followed" and "Global"
-    const followedPosts = [];
-    const globalPosts = [];
+    // 2. FAST DB QUERY: If they follow no one (or need more content), backfill with Global posts
+    let globalPosts = [];
+    if (followedPosts.length < limit) {
+      const remainingLimit = limit - followedPosts.length;
+      
+      globalPosts = await Post.find({
+          status: { $ne: "scheduled" },
+          userId: { $nin: priorityUserIds } // Exclude the ones we just fetched
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip) // Keeps pagination accurate
+        .limit(remainingLimit)
+        .populate({
+          path: "comments",
+          populate: { path: "user replies.user", select: "name username photo" }
+        })
+        .populate("userId", "name username photo")
+        .populate("likedBy", "name username photo");
+    }
 
-    allPosts.forEach(post => {
-      // Safety check in case a user was deleted but their post remains
-      if (!post.userId) return; 
+    // Combine them
+    const feed = [...followedPosts, ...globalPosts];
 
-      const postAuthorId = post.userId._id.toString();
+    // 🚨 SEND RESPONSE IMMEDIATELY 🚨
+    // The user gets their feed instantly without waiting for the auto-heal loop!
+    res.status(200).json(feed);
 
-      // If the user follows the author, OR if it's the user's own post, put it at the top!
-      if (followingIds.includes(postAuthorId) || postAuthorId === userId.toString()) {
-        followedPosts.push(post);
-      } else {
-        globalPosts.push(post);
+    // ==========================================
+    // ⚡ BACKGROUND PROCESS (Non-Blocking)
+    // ==========================================
+    // This runs AFTER the user already got their feed.
+    (async () => {
+      try {
+        let dbUpdated = false;
+        
+        // We only loop through the 20 posts we just fetched, not the whole database!
+        for (let post of feed) {
+          if (!post.slug) {
+            const plainText = post.content ? post.content.replace(/(<([^>]+)>)/gi, "").substring(0, 40) : "post";
+            const baseSlug = slugify(plainText, { lower: true, strict: true });
+            const uniqueId = Math.random().toString(36).substring(2, 6);
+            
+            // Because 'post' is a JSON object here, we must fetch the Mongoose document to save it
+            await Post.updateOne(
+              { _id: post._id }, 
+              { $set: { slug: `${baseSlug}-${uniqueId}` } }
+            );
+            dbUpdated = true;
+          }
+        }
+
+        if (dbUpdated) {
+          const cloudflareWebhookUrl = process.env.CLOUDFLARE_DEPLOY_WEBHOOK;
+          if (cloudflareWebhookUrl) fetch(cloudflareWebhookUrl, { method: "POST" }).catch(console.error);
+        }
+      } catch (bgErr) {
+        console.error("Background Heal Error:", bgErr);
       }
-    });
+    })(); // Immediately Invoked Async Function
 
-    // 4. Combine them: Followed/Own posts first, then everyone else's!
-    const personalizedFeed = [...followedPosts, ...globalPosts];
-
-    return res.status(200).json(personalizedFeed);
   } catch (err) {
-    console.error("Feed Fetch Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -676,26 +723,32 @@ router.delete("/posts/images", authenticate, async (req, res) => {
   }
 });
 
+// ==========================================
+// EXPORT ALL POSTS FOR CLOUDFLARE PYTHON SCRIPT (WITH AUTO-HEALING)
+// ==========================================
 router.get("/export", async (req, res) => {
   try {
-    // Only fetch posts that are actually published
     const posts = await Post.find({ status: { $ne: "scheduled" } })
       .populate("userId", "name username photo")
       .sort({ createdAt: -1 });
     
+    let dbUpdated = false;
+
     const formattedPosts = await Promise.all(posts.map(async (post) => {
       let currentSlug = post.slug;
 
-      // 🚨 AUTO-HEALING: Generate slugs for all old posts
+      // 🚨 AUTO-HEALING: Use updateOne to prevent VersionErrors!
       if (!currentSlug) {
-        // Strip HTML tags and take the first 40 characters for the URL
-        const plainText = post.content.replace(/(<([^>]+)>)/gi, "").substring(0, 40);
-        const baseSlug = slugify(plainText || "post", { lower: true, strict: true });
+        const plainText = post.content ? post.content.replace(/(<([^>]+)>)/gi, "").substring(0, 40) : "post";
+        const baseSlug = slugify(plainText, { lower: true, strict: true });
         const uniqueId = Math.random().toString(36).substring(2, 6);
         currentSlug = `${baseSlug}-${uniqueId}`;
         
-        post.slug = currentSlug;
-        await post.save(); 
+        await Post.updateOne(
+          { _id: post._id },
+          { $set: { slug: currentSlug } }
+        );
+        dbUpdated = true;
       }
 
       return {
@@ -711,8 +764,12 @@ router.get("/export", async (req, res) => {
       };
     }));
 
+    // Optional: If you want to know when it healed during export
+    if (dbUpdated) console.log("✅ Auto-healed missing slugs during export!");
+
     res.status(200).json(formattedPosts);
   } catch (err) {
+    console.error("Export Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
