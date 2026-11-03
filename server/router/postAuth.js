@@ -731,7 +731,7 @@ router.delete("/posts/images", authenticate, async (req, res) => {
 // ==========================================
 // EXPORT ALL POSTS FOR CLOUDFLARE PYTHON SCRIPT (WITH AUTO-HEALING)
 // ==========================================
-router.get("posts/export", async (req, res) => {
+router.get("/posts/export", async (req, res) => {
   try {
     const posts = await Post.find({ status: { $ne: "scheduled" } })
       .populate("userId", "name username photo")
@@ -905,7 +905,7 @@ router.post("/blogs", authenticate, async (req, res) => {
 router.get("/blogs/export", async (req, res) => {
   try {
     // 🚨 SECURE: Only fetch blogs that are actually 'published'
-    const blogs = await Blog.find({ status: "published" }).sort({ publishedAt: -1 });
+    const blogs = await Blog.find({ status: { $ne: "scheduled" } }).sort({ createdAt: -1 });
     
     const formattedBlogs = await Promise.all(blogs.map(async (blog) => {
       let currentSlug = blog.slug;
