@@ -33,6 +33,11 @@ router.post("/posts", authenticate, async (req, res) => {
       }
     }
 
+    const plainText = content ? content.replace(/(<([^>]+)>)/gi, "").substring(0, 40) : "post";
+    const baseSlug = slugify(plainText, { lower: true, strict: true });
+    const uniqueId = Math.random().toString(36).substring(2, 6);
+    const slug = `${baseSlug}-${uniqueId}`;
+
     // --- 2. CREATE POST ---
     const newPost = new Post({
       userId: req.userId,
@@ -40,7 +45,8 @@ router.post("/posts", authenticate, async (req, res) => {
       images: images || [],
       status: postStatus, 
       scheduledFor: parsedDate, 
-      distribution: distribution || {} 
+      distribution: distribution || {},
+      slug: slug 
     });
 
     await newPost.save();
@@ -108,6 +114,14 @@ router.post("/posts", authenticate, async (req, res) => {
         } catch (linkedinErr) {
           console.error("Error communicating with LinkedIn API:", linkedinErr);
         }
+      }
+    }
+
+    // 3. PING CLOUDFLARE IF INSTANTLY PUBLISHED
+    if (postStatus === "published") {
+      const cloudflareWebhookUrl = process.env.CLOUDFLARE_DEPLOY_WEBHOOK;
+      if (cloudflareWebhookUrl) {
+        fetch(cloudflareWebhookUrl, { method: "POST" }).catch(console.error);
       }
     }
 
@@ -438,15 +452,19 @@ router.put("/posts/:postId", authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 8. GET A SINGLE POST BY ID (For Sharing!)
+// 8. GET A SINGLE POST (Supports both ID and Slug!)
 // ==========================================
-router.get("/posts/single/:postId", async (req, res) => {
+router.get("/posts/single/:idOrSlug", async (req, res) => {
   try {
-    const { postId } = req.params;
+    const { idOrSlug } = req.params;
     
-    // Fetch the post and populate all the faces and names!
-    const post = await Post.findById(postId)
-    .populate({
+    // 1. Check if the parameter is a valid MongoDB ID, otherwise assume it's an SEO slug
+    const isObjectId = mongoose.Types.ObjectId.isValid(idOrSlug);
+    const query = isObjectId ? { _id: idOrSlug } : { slug: idOrSlug };
+    
+    // 2. Fetch the post and populate all the faces and names (Your original detailed populates!)
+    const post = await Post.findOne(query)
+      .populate({
         path: "comments",
         populate: { 
           path: "user replies.user",
@@ -460,7 +478,7 @@ router.get("/posts/single/:postId", async (req, res) => {
 
     if (!post) return res.status(404).json({ message: "Post not found" });
 
-    // 🚨 SECURE THE ROUTE: Block access to scheduled posts
+    // 🚨 3. SECURE THE ROUTE: Block access to scheduled posts
     if (post.status === "scheduled") {
       return res.status(403).json({ message: "This post has not been published yet." });
     }
@@ -658,71 +676,188 @@ router.delete("/posts/images", authenticate, async (req, res) => {
   }
 });
 
-// ==========================================
-// 11. CREATE BLOG & TRIGGER CLOUDFLARE BUILD
-// ==========================================
-router.post("/blogs", authenticate, async (req, res) => {
+router.get("/export", async (req, res) => {
   try {
-    const { title, summary, content, coverImage, category, authorName, cta } = req.body;
-
-    const user = await User.findById(req.userId);
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    // 🚨 GENERATE SEO SLUG
-    const baseSlug = slugify(title, { lower: true, strict: true });
-    const uniqueId = Math.random().toString(36).substring(2, 6);
-    const slug = `${baseSlug}-${uniqueId}`;
-
-    const newBlog = new Blog({
-      title,
-      slug, // 🚨 SAVE SLUG TO DB
-      summary,
-      content,
-      coverImage,
-      category,
-      authorName: authorName || user.name,
-      authorId: req.userId,
-      cta 
-    });
+    // Only fetch posts that are actually published
+    const posts = await Post.find({ status: { $ne: "scheduled" } })
+      .populate("userId", "name username photo")
+      .sort({ createdAt: -1 });
     
-    await newBlog.save();
+    const formattedPosts = await Promise.all(posts.map(async (post) => {
+      let currentSlug = post.slug;
 
-    const cloudflareWebhookUrl = process.env.CLOUDFLARE_DEPLOY_WEBHOOK;
-    if (cloudflareWebhookUrl) {
-      fetch(cloudflareWebhookUrl, { method: "POST" }).catch(console.error);
-    }
+      // 🚨 AUTO-HEALING: Generate slugs for all old posts
+      if (!currentSlug) {
+        // Strip HTML tags and take the first 40 characters for the URL
+        const plainText = post.content.replace(/(<([^>]+)>)/gi, "").substring(0, 40);
+        const baseSlug = slugify(plainText || "post", { lower: true, strict: true });
+        const uniqueId = Math.random().toString(36).substring(2, 6);
+        currentSlug = `${baseSlug}-${uniqueId}`;
+        
+        post.slug = currentSlug;
+        await post.save(); 
+      }
 
-    res.status(201).json({ message: "Blog published! Cloudflare is rebuilding...", newBlog });
+      return {
+        id: post._id.toString(),
+        slug: currentSlug,
+        content: post.content,
+        images: post.images?.length > 0 ? post.images : (post.imageUrl ? [post.imageUrl] : []),
+        authorName: post.userId?.name,
+        authorUsername: post.userId?.username,
+        authorPhoto: post.userId?.photo,
+        date: post.createdAt.toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' }),
+        likes: post.likes
+      };
+    }));
+
+    res.status(200).json(formattedPosts);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ==========================================
-// 12. EXPORT ALL BLOGS FOR CLOUDFLARE PYTHON SCRIPT (WITH AUTO-HEALING)
+// 11. CREATE BLOG & TRIGGER CLOUDFLARE BUILD
+// ==========================================
+router.post("/blogs", authenticate, async (req, res) => {
+  try {
+    const { 
+      title, summary, content, coverImage, category, authorName, cta, 
+      isScheduled, scheduledFor, 
+      promoteOnCute, promoteOnLinkedIn // 🚨 NEW: Promotion Toggles
+    } = req.body;
+
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // 1. GENERATE SEO SLUG
+    const baseSlug = slugify(title, { lower: true, strict: true });
+    const uniqueId = Math.random().toString(36).substring(2, 6);
+    const slug = `${baseSlug}-${uniqueId}`;
+    
+    const status = isScheduled ? "scheduled" : "published";
+    const parsedDate = isScheduled && scheduledFor ? new Date(scheduledFor) : null;
+
+    // 2. CREATE BLOG
+    const newBlog = new Blog({
+      title, slug, summary, content, coverImage, category,
+      authorName: authorName || user.name,
+      authorId: req.userId,
+      cta, status, scheduledFor: parsedDate 
+    });
+    
+    await newBlog.save();
+
+    // 🚨 3. CROSS-PROMOTION LOGIC
+    if (promoteOnCute || promoteOnLinkedIn) {
+      const blogUrl = `https://curiousteamlearning.com/blog/${slug}`;
+      // Creates a clean text post for the feeds
+      const promoContent = `<p>Excited to share our latest article: <strong>${title}</strong></p><p>${summary}</p><p>Read the full article here: <a href="${blogUrl}">${blogUrl}</a></p>`;
+
+      const newPost = new Post({
+        userId: req.userId,
+        content: promoContent,
+        images: coverImage ? [coverImage] : [], // Use the blog cover as the social image!
+        status: status, 
+        scheduledFor: parsedDate, 
+        distribution: {
+          cute: promoteOnCute ? {
+            status: status === "scheduled" ? "scheduled" : "posted",
+            scheduledFor: parsedDate
+          } : { status: 'unselected' },
+          linkedin: promoteOnLinkedIn ? {
+            status: status === "scheduled" ? "scheduled" : "posted",
+            scheduledFor: parsedDate
+          } : { status: 'unselected' }
+        }
+      });
+
+      await newPost.save();
+      user.posts.push(newPost._id);
+      await user.save();
+
+      // IF INSTANT LINKEDIN POST:
+      if (promoteOnLinkedIn && status === "published") {
+        const connection = await SocialConnection.findOne({ userId: req.userId, provider: 'linkedin' });
+        if (connection && connection.accessToken) {
+          try {
+            let specificContent = {
+              "com.linkedin.ugc.ShareContent": {
+                shareCommentary: { text: formatHtmlForLinkedIn(promoContent) },
+                shareMediaCategory: "NONE" 
+              }
+            };
+
+            if (coverImage) {
+              const assetUrn = await uploadImageToLinkedIn(coverImage, connection.accessToken, connection.providerAccountId);
+              specificContent["com.linkedin.ugc.ShareContent"].shareMediaCategory = "IMAGE";
+              specificContent["com.linkedin.ugc.ShareContent"].media = [{ status: "READY", media: assetUrn }];
+            }
+
+            const linkedInRes = await fetch('https://api.linkedin.com/v2/ugcPosts', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${connection.accessToken}`,
+                'Content-Type': 'application/json',
+                'X-Restli-Protocol-Version': '2.0.0'
+              },
+              body: JSON.stringify({
+                author: connection.providerAccountId,
+                lifecycleState: 'PUBLISHED',
+                specificContent: specificContent,
+                visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
+              })
+            });
+
+            if (!linkedInRes.ok) {
+              const errData = await linkedInRes.json();
+              newPost.distribution.linkedin.status = 'failed';
+              newPost.distribution.linkedin.errorLog = errData.message;
+              await newPost.save();
+            }
+          } catch (err) {
+            console.error("LinkedIn Promotion Error:", err);
+          }
+        }
+      }
+    }
+
+    // 4. CLOUDFLARE BUILD (If instant)
+    if (status === "published") {
+      const cloudflareWebhookUrl = process.env.CLOUDFLARE_DEPLOY_WEBHOOK;
+      if (cloudflareWebhookUrl) {
+        fetch(cloudflareWebhookUrl, { method: "POST" }).catch(console.error);
+      }
+    }
+
+    res.status(201).json({ message: status === "scheduled" ? "Blog scheduled successfully!" : "Blog published!", newBlog });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 12. EXPORT ALL BLOGS FOR CLOUDFLARE PYTHON SCRIPT
 // ==========================================
 router.get("/blogs/export", async (req, res) => {
   try {
-    const blogs = await Blog.find().sort({ publishedAt: -1 });
+    // 🚨 SECURE: Only fetch blogs that are actually 'published'
+    const blogs = await Blog.find({ status: "published" }).sort({ publishedAt: -1 });
     
-    // 🚨 Use Promise.all to handle the async auto-healing saves
     const formattedBlogs = await Promise.all(blogs.map(async (blog) => {
-      
       let currentSlug = blog.slug;
-
-      // 🚨 AUTO-HEALING: If an old blog has no slug, make one and save it forever
       if (!currentSlug) {
         const baseSlug = slugify(blog.title, { lower: true, strict: true });
         const uniqueId = Math.random().toString(36).substring(2, 6);
         currentSlug = `${baseSlug}-${uniqueId}`;
-        
         blog.slug = currentSlug;
-        await blog.save(); // Permanently fixes the old database entry!
+        await blog.save(); 
       }
 
       return {
         id: blog._id.toString(),
-        slug: currentSlug, // 🚨 EXPORT THE SLUG TO PYTHON
+        slug: currentSlug,
         title: blog.title,
         summary: blog.summary,
         content: blog.content,

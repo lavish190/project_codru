@@ -53,6 +53,7 @@ const postSchema = new mongoose.Schema({
   images: { type: [String], default: [] },
   title: { type: String }, 
   content: { type: String, required: true }, 
+  slug: { type: String, unique: true, sparse: true },
 
   // LEGACY FIELDS: Kept here so existing database posts don't break
   status: { type: String, enum: ["published", "scheduled"], default: "published" },

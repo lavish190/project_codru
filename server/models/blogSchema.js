@@ -37,6 +37,15 @@ const blogSchema = new mongoose.Schema({
     ref: "User",
     default: null 
   }, 
+  status: { 
+    type: String, 
+    enum: ['published', 'scheduled'], 
+    default: 'published' 
+  },
+  scheduledFor: { 
+    type: Date, 
+    default: null 
+  },
   publishedAt: { 
     type: Date, 
     default: Date.now 

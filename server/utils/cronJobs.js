@@ -8,6 +8,7 @@ const Post = require('../models/postSchema');
 const SocialConnection = require('../models/SocialConnection');
 const { formatHtmlForLinkedIn } = require('./formatters');
 const { uploadImageToLinkedIn } = require('./linkedinHelper');
+const Blog = require('../models/blogSchema');
 
 // ==========================================
 // HELPER: MARK AS NO-SHOW
@@ -252,6 +253,11 @@ const startAllCronJobs = (app) => {
           if (post.distribution?.cute) post.distribution.cute.status = "posted";
           post.createdAt = now; 
           modified = true;
+
+          const cloudflareWebhookUrl = process.env.CLOUDFLARE_DEPLOY_WEBHOOK;
+          if (cloudflareWebhookUrl) {
+            fetch(cloudflareWebhookUrl, { method: "POST" }).catch(console.error);
+          }
         }
 
         if (modified) {
@@ -259,6 +265,32 @@ const startAllCronJobs = (app) => {
           console.log(`✅ Processed auto-publishing for scheduled post: ${post._id}`);
         }
       }
+
+      // --- C. HANDLE BLOG PUBLISHING ---
+      const dueBlogs = await Blog.find({ 
+        status: "scheduled", 
+        scheduledFor: { $lte: now } 
+      });
+
+      let triggeredBlogWebhook = false;
+
+      for (const blog of dueBlogs) {
+        blog.status = "published";
+        blog.publishedAt = now; // Update the date so it shows today's date on the website!
+        await blog.save();
+        triggeredBlogWebhook = true;
+        console.log(`✅ Auto-published scheduled blog: ${blog._id}`);
+      }
+
+      // If at least one blog was published, trigger the Cloudflare build ONCE
+      if (triggeredBlogWebhook) {
+        const cloudflareWebhookUrl = process.env.CLOUDFLARE_DEPLOY_WEBHOOK;
+        if (cloudflareWebhookUrl) {
+          fetch(cloudflareWebhookUrl, { method: "POST" }).catch(console.error);
+          console.log("🚀 Pinged Cloudflare Webhook for new scheduled blogs");
+        }
+      }
+
     } catch (error) {
       console.error("Scheduled Post Cron Error:", error);
     }

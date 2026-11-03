@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { Image as ImageIcon, X, Loader2, Send, FileText, AlertCircle, Eye, Settings2, AlignLeft, AlignCenter, AlignRight, Link2, Upload, Maximize, Minimize, ArrowLeft } from "lucide-react";
+import { Image as ImageIcon, X, Loader2, Send, FileText, AlertCircle, Eye, Settings2, AlignLeft, AlignCenter, AlignRight, Link2, Upload, Maximize, Minimize, ArrowLeft, Clock, CheckCircle2, Globe } from "lucide-react";
 import Muialert from "./Muialert";
 import RichTextEditor from "./RichTextEditor";
 import { UserData } from "../App";
@@ -27,6 +27,12 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [scheduleConfig, setScheduleConfig] = useState({ isScheduled: false, time: "" });
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [isLinkedInConnected, setIsLinkedInConnected] = useState(false);
+  const [promoteOnCute, setPromoteOnCute] = useState(false);
+  const [promoteOnLinkedIn, setPromoteOnLinkedIn] = useState(false);
+
   const [cta, setCta] = useState({
     enabled: false,
     text: "Learn More",
@@ -44,6 +50,22 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
   const [isPublishing, setIsPublishing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [alert, setAlert] = useState({ show: false, message: "", type: "success" as "success" | "error" });
+
+  useEffect(() => {
+    const checkConnections = async () => {
+      try {
+        const token = localStorage.getItem("jwtoken");
+        const res = await fetch(`${import.meta.env.VITE_API}auth/connections`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        const data = await res.json();
+        setIsLinkedInConnected(data.linkedin); 
+      } catch (err) {
+        console.error("Failed to fetch social connections");
+      }
+    };
+    checkConnections();
+  }, []);
 
   useEffect(() => {
     if (isEditMode && editBlogData) {
@@ -170,6 +192,10 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({
           title, summary, content, coverImage: finalImageUrl, category, authorName,
+          isScheduled: scheduleConfig.isScheduled, // 🚨 Pass schedule info
+          scheduledFor: scheduleConfig.time,       // 🚨 Pass schedule time
+          promoteOnCute,         
+          promoteOnLinkedIn,
           cta: {
             enabled: cta.enabled, text: cta.text, link: cta.link, color: cta.color, 
             size: cta.size, alignment: cta.alignment, width: cta.width, radius: cta.radius,
@@ -381,19 +407,84 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
               )}
             </div>
 
-            <div className="space-y-2 md:w-1/2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Publishing As</label>
-              <input type="text" value={authorName} onChange={(e) => setAuthorName(e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-brand-blue/50 text-gray-800" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Existing Publishing As Input */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Publishing As</label>
+                <input type="text" value={authorName} onChange={(e) => setAuthorName(e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-brand-blue/50 text-gray-800" />
+              </div>
+
+              {/* 🚨 NEW: Cross-Promotion Toggles */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Auto-Promote on Socials</label>
+                <div className="flex items-center gap-4 bg-slate-50 border border-gray-200 rounded-xl px-4 py-2 h-[42px]">
+                  
+                  {/* CuTe Feed Toggle */}
+                  <label className={`flex items-center gap-2 cursor-pointer transition-colors ${promoteOnCute ? 'text-brand-orange' : 'text-gray-400 hover:text-gray-600'}`}>
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center border ${promoteOnCute ? 'bg-brand-orange border-brand-orange text-white' : 'border-gray-300'}`}>
+                      {promoteOnCute && <CheckCircle2 className="w-3 h-3" />}
+                    </div>
+                    <span className="text-sm font-bold flex items-center gap-1"><Globe className="w-3.5 h-3.5"/> CuTe Feed</span>
+                    <input type="checkbox" className="hidden" checked={promoteOnCute} onChange={(e) => setPromoteOnCute(e.target.checked)} />
+                  </label>
+
+                  <div className="w-px h-5 bg-gray-200"></div>
+
+                  {/* LinkedIn Toggle */}
+                  <label className={`flex items-center gap-2 transition-colors ${!isLinkedInConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${promoteOnLinkedIn ? 'text-[#0A66C2]' : 'text-gray-400 hover:text-gray-600'}`}>
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center border ${promoteOnLinkedIn ? 'bg-[#0A66C2] border-[#0A66C2] text-white' : 'border-gray-300'}`}>
+                      {promoteOnLinkedIn && <CheckCircle2 className="w-3 h-3" />}
+                    </div>
+                    <span className="text-sm font-bold flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+                      LinkedIn
+                    </span>
+                    <input type="checkbox" className="hidden" disabled={!isLinkedInConnected} checked={promoteOnLinkedIn} onChange={(e) => setPromoteOnLinkedIn(e.target.checked)} />
+                  </label>
+                  
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="p-6 bg-slate-50 border-t border-gray-100 flex items-center justify-end gap-4 rounded-b-3xl">
+          <div className="p-6 bg-slate-50 border-t border-gray-100 flex items-center justify-end gap-4 rounded-b-3xl relative">
             <button type="button" onClick={resetForm} className="px-6 py-2.5 rounded-full font-bold text-gray-500 hover:bg-gray-200 transition-colors">
               {isEditMode ? "Cancel Edit" : "Clear Draft"}
             </button>
-            <button type="submit" disabled={isPublishing} className="flex items-center gap-2 bg-brand-orange text-white px-8 py-2.5 rounded-full font-bold shadow-md hover:bg-orange-600 hover:shadow-lg transition-all disabled:opacity-50 transform hover:-translate-y-0.5">
-              {isPublishing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send className="w-4 h-4" /><span>{isEditMode ? "Save Changes" : "Publish Article"}</span></>}
-            </button>
+
+            {/* SCHEDULE MODAL */}
+            {showScheduleModal && (
+              <div className="absolute right-6 bottom-[80px] w-72 bg-white border border-gray-200 rounded-2xl shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-bottom-2">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-gray-800 text-sm">Schedule Blog</h3>
+                  <button type="button" onClick={() => setShowScheduleModal(false)} className="text-gray-400 hover:text-red-500"><X className="w-4 h-4" /></button>
+                </div>
+                <div className="flex items-center justify-between mb-4 bg-gray-50 p-2 rounded-lg">
+                  <span className="text-xs font-semibold text-gray-600">Enable Scheduling</span>
+                  <input type="checkbox" checked={scheduleConfig.isScheduled} onChange={(e) => setScheduleConfig({ ...scheduleConfig, isScheduled: e.target.checked })} className="w-4 h-4 accent-brand-orange" />
+                </div>
+                {scheduleConfig.isScheduled && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500">Publish Date & Time</label>
+                    <input type="datetime-local" min={new Date().toISOString().slice(0, 16)} value={scheduleConfig.time} onChange={(e) => setScheduleConfig({ ...scheduleConfig, time: e.target.value })} className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand-orange outline-none" />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* APPLE STYLE SPLIT PILL */}
+            <div className={`shrink-0 flex items-stretch bg-brand-orange rounded-full transition-all divide-x divide-white/20 overflow-hidden ${isPublishing ? 'opacity-50 grayscale-[15%]' : 'shadow-md hover:shadow-lg hover:-translate-y-0.5'}`}>
+              <button type="submit" disabled={isPublishing} className="text-white pl-5 pr-3 py-2.5 font-bold flex items-center gap-2 transition-colors disabled:cursor-not-allowed hover:bg-orange-600">
+                {isPublishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                <span>{scheduleConfig.isScheduled ? "Schedule Blog" : (isEditMode ? "Save Changes" : "Publish Article")}</span>
+              </button>
+              
+              {!isEditMode && (
+                <button type="button" onClick={() => setShowScheduleModal(!showScheduleModal)} disabled={isPublishing} className={`text-white pr-4 pl-3 flex items-center justify-center transition-colors disabled:cursor-not-allowed ${showScheduleModal || scheduleConfig.isScheduled ? 'bg-orange-600' : 'hover:bg-orange-600'}`} title="Schedule Blog Options">
+                  <Clock className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
         </form>
       </div>
