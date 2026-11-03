@@ -504,11 +504,13 @@ router.put("/posts/:postId", authenticate, async (req, res) => {
 router.get("/posts/single/:idOrSlug", async (req, res) => {
   try {
     const { idOrSlug } = req.params;
+
+    idOrSlug = idOrSlug.replace('.html', '');
     
     // 1. Check if the parameter is a valid MongoDB ID, otherwise assume it's an SEO slug
     const isObjectId = mongoose.Types.ObjectId.isValid(idOrSlug);
     const query = isObjectId ? { _id: idOrSlug } : { slug: idOrSlug };
-    
+
     // 2. Fetch the post and populate all the faces and names (Your original detailed populates!)
     const post = await Post.findOne(query)
       .populate({

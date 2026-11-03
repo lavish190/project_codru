@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Loader2, ArrowLeft } from "lucide-react";
 import PostCard from "./PostCard";
+import NotFound from "./NotFound";
 
 const SinglePost = ({ userData }: any) => {
   const { postId } = useParams();
@@ -100,7 +101,7 @@ const SinglePost = ({ userData }: any) => {
   };
 
   if (isLoading) return <div className="flex justify-center items-center h-screen text-brand-orange"><Loader2 className="w-12 h-12 animate-spin" /></div>;
-  if (error || !post) return <div className="text-center py-20"><h2 className="text-2xl font-bold">Oops!</h2><p className="text-gray-500 mt-2">{error || "Post deleted."}</p><button onClick={() => navigate("/")} className="mt-4 text-brand-blue hover:underline">Go back home</button></div>;
+  if (error || !post) return <NotFound mode="404" />;
 
   return (
     <div className="w-full max-w-2xl mx-auto py-0 sm:py-8 pb-20 sm:px-4">
