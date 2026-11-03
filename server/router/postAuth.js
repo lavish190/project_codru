@@ -731,7 +731,7 @@ router.delete("/posts/images", authenticate, async (req, res) => {
 // ==========================================
 // EXPORT ALL POSTS FOR CLOUDFLARE PYTHON SCRIPT (WITH AUTO-HEALING)
 // ==========================================
-router.get("/export", async (req, res) => {
+router.get("posts/export", async (req, res) => {
   try {
     const posts = await Post.find({ status: { $ne: "scheduled" } })
       .populate("userId", "name username photo")
