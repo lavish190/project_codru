@@ -112,7 +112,7 @@ export default function PostCard({
             <span className="text-sm font-semibold">{post.comments?.length || 0}</span>
           </button>
 
-          <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/post/${post.slug || post._id}.html`); alert("Link copied!"); }} className="text-gray-600 hover:text-green-500 transition-colors group">
+          <button onClick={() => { navigator.clipboard.writeText(`https://curiousteamlearning.com/post/${post.slug || post._id}.html`); alert("Link copied!");}} className="text-gray-600 hover:text-green-500 transition-colors group">
             <Share2 className="w-5 h-5 sm:w-6 sm:h-6 group-active:scale-75 transition-transform" strokeWidth={1.5} />
           </button>
         </div>
