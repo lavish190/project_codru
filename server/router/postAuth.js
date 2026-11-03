@@ -499,41 +499,44 @@ router.put("/posts/:postId", authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 8. GET A SINGLE POST (Supports both ID and Slug!)
+// 8. GET A SINGLE POST (Strict Regex Check)
 // ==========================================
 router.get("/posts/single/:idOrSlug", async (req, res) => {
   try {
-    const { idOrSlug } = req.params;
+    let { idOrSlug } = req.params;
 
-    idOrSlug = idOrSlug.replace('.html', '');
+    // 1. Strip .html just in case it carried over
+    idOrSlug = idOrSlug.replace('.html', '').trim();
     
-    // 1. Check if the parameter is a valid MongoDB ID, otherwise assume it's an SEO slug
-    const isObjectId = mongoose.Types.ObjectId.isValid(idOrSlug);
+    // 2. 🚨 THE FIX: Strict Regex to prevent Mongoose bugs!
+    // Only true 24-character hex strings are treated as ObjectIds
+    const isObjectId = /^[0-9a-fA-F]{24}$/.test(idOrSlug);
     const query = isObjectId ? { _id: idOrSlug } : { slug: idOrSlug };
 
-    // 2. Fetch the post and populate all the faces and names (Your original detailed populates!)
+    console.log(`[Single Post] Searching by ${isObjectId ? 'ID' : 'Slug'}:`, idOrSlug);
+
     const post = await Post.findOne(query)
       .populate({
         path: "comments",
-        populate: { 
-          path: "user replies.user",
-          select: "name username photo" 
-        }
+        populate: { path: "user replies.user", select: "name username photo" }
       })
       .populate("userId", "name username photo")
       .populate("likedBy", "name username photo")
       .populate({ path: "comments.user", select: "name username photo" })
       .populate({ path: "comments.replies.user", select: "name username photo" });
 
-    if (!post) return res.status(404).json({ message: "Post not found" });
+    if (!post) {
+      console.log(`[Single Post] ❌ Not found in DB:`, idOrSlug);
+      return res.status(404).json({ message: "Post not found" });
+    }
 
-    // 🚨 3. SECURE THE ROUTE: Block access to scheduled posts
     if (post.status === "scheduled") {
       return res.status(403).json({ message: "This post has not been published yet." });
     }
 
     res.status(200).json(post);
   } catch (err) {
+    console.error("[Single Post] Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
