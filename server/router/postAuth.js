@@ -904,7 +904,7 @@ router.post("/blogs", authenticate, async (req, res) => {
 // ==========================================
 router.get("/blogs/export", async (req, res) => {
   try {
-    // 🚨 SECURE: Only fetch blogs that are actually 'published'
+    // 🚨 THE FIX: Use $ne to include older blogs that don't have the status field yet!
     const blogs = await Blog.find({ status: { $ne: "scheduled" } }).sort({ createdAt: -1 });
     
     const formattedBlogs = await Promise.all(blogs.map(async (blog) => {
@@ -917,6 +917,9 @@ router.get("/blogs/export", async (req, res) => {
         await blog.save(); 
       }
 
+      // 🚨 THE FIX: Fallback to createdAt if publishedAt doesn't exist on older blogs
+      const dateToUse = blog.publishedAt || blog.createdAt || new Date();
+
       return {
         id: blog._id.toString(),
         slug: currentSlug,
@@ -924,7 +927,7 @@ router.get("/blogs/export", async (req, res) => {
         summary: blog.summary,
         content: blog.content,
         image: blog.coverImage,
-        date: blog.publishedAt.toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' }),
+        date: dateToUse.toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' }),
         author: blog.authorName,
         category: blog.category,
         cta: blog.cta 
@@ -933,6 +936,7 @@ router.get("/blogs/export", async (req, res) => {
 
     res.status(200).json(formattedBlogs);
   } catch (err) {
+    console.error("Blog Export Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
