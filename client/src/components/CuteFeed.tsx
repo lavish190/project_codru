@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Muialert from "./Muialert";
 import { Loader2 } from "lucide-react";
 import { UserData } from "../App";
-import PostCard from "./PostCard"; // 🚨 Use your new master component!
+import PostCard from "./PostCard"; 
 
 interface CuteFeedProps {
   userData: UserData;
@@ -24,43 +24,38 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
   const currentUsername = localStorage.getItem("Username");
 
   useEffect(() => {
-    fetchPosts();
-    fetchFollowingList(); 
+    // 🚨 BUNDLED FETCH: Wait for Posts, Saves, and Follows to ALL finish before dropping the loading spinner
+    const fetchAllFeedData = async () => {
+      setIsLoading(true);
+      try {
+        const token = localStorage.getItem("jwtoken");
+        const headers = { "Authorization": `Bearer ${token}` };
+
+        const [postsRes, savedRes, profileRes] = await Promise.all([
+          fetch(`${import.meta.env.VITE_API}posts`, { headers }),
+          fetch(`${import.meta.env.VITE_API}saved-posts/ids`, { headers }),
+          fetch(`${import.meta.env.VITE_API}profile`, { headers })
+        ]);
+
+        if (!postsRes.ok) throw new Error("Failed to load feed");
+        
+        setPosts(await postsRes.json());
+        if (savedRes.ok) setSavedPostIds(await savedRes.json());
+        if (profileRes.ok) {
+          const profileData = await profileRes.json();
+          setFollowingUsernames(profileData.user.following.map((f: any) => f.username));
+        }
+      } catch (err: any) {
+        setError(err.message || "Could not load posts.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAllFeedData();
   }, [refreshTrigger]);
 
-  const fetchFollowingList = async () => {
-    try {
-      const token = localStorage.getItem("jwtoken");
-      const res = await fetch(`${import.meta.env.VITE_API}profile`, { headers: { "Authorization": `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        setFollowingUsernames(data.user.following.map((f: any) => f.username));
-      }
-    } catch (err) {
-      console.error("Failed to fetch following list", err);
-    }
-  };
-
-  const fetchPosts = async () => {
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem("jwtoken");
-      const res = await fetch(`${import.meta.env.VITE_API}posts`, { headers: { "Authorization": `Bearer ${token}` } });
-      if (!res.ok) throw new Error("Failed to load feed");
-      setPosts(await res.json());
-
-      const savedRes = await fetch(`${import.meta.env.VITE_API}saved-posts/ids`, { headers: { "Authorization": `Bearer ${token}` } });
-      if (savedRes.ok) setSavedPostIds(await savedRes.json());
-    } catch (err: any) {
-      setError(err.message || "Could not load posts.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 🚨 OPTIMISTIC UI: INSTANT LIKES
   const handleLike = async (postId: string) => {
-    // 1. Instantly update UI before server responds
     setPosts(prevPosts => prevPosts.map(p => {
       if (p._id !== postId) return p;
       const isLiked = p.likedBy?.some((u: any) => (u._id || u) === currentUserId);
@@ -71,7 +66,6 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
       };
     }));
 
-    // 2. Perform background server update
     try {
       const token = localStorage.getItem("jwtoken");
       await fetch(`${import.meta.env.VITE_API}posts/${postId}/like`, { method: "POST", headers: { "Authorization": `Bearer ${token}` } });
@@ -80,7 +74,6 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
     }
   };
 
-  // 🚨 OPTIMISTIC UI: INSTANT SAVES
   const handleSave = async (postId: string) => {
     const isSaved = savedPostIds.includes(postId);
     setSavedPostIds(prev => isSaved ? prev.filter(id => id !== postId) : [...prev, postId]);
@@ -109,16 +102,24 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
 
   const handleDeletePost = async (postId: string) => {
     if (!window.confirm("Are you sure you want to delete this post?")) return;
+    
+    // 🚨 OPTIMISTIC UI: Remove it instantly, revert if server fails
+    const originalPosts = [...posts];
+    setPosts(prev => prev.filter(p => p._id !== postId));
+
     try {
       const token = localStorage.getItem("jwtoken");
       const res = await fetch(`${import.meta.env.VITE_API}posts/${postId}`, { method: "DELETE", headers: { "Authorization": `Bearer ${token}` } });
-      if (res.ok) setPosts(posts.filter(p => p._id !== postId));
+      if (!res.ok) throw new Error("Failed to delete");
     } catch (err) {
       console.error("Failed to delete", err);
+      setPosts(originalPosts); // Put it back if the server errored out
+      setAlert({ show: true, message: "Failed to delete post", type: "error" });
     }
   };
 
-  const handleCommentSubmit = async (postId: string, text: string, parentId?: string) => {
+  // 🚨 Wrapped in useCallback to prevent child re-renders
+  const handleCommentSubmit = useCallback(async (postId: string, text: string, parentId?: string) => {
     if (!text.trim() || isSubmitting[postId]) return;
     setIsSubmitting(prev => ({ ...prev, [postId]: true }));
 
@@ -138,7 +139,7 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
     } finally {
       setIsSubmitting(prev => ({ ...prev, [postId]: false }));
     }
-  };
+  }, [isSubmitting]);
 
   if (isLoading) return <div className="flex justify-center items-center h-64 text-brand-orange"><Loader2 className="w-10 h-10 animate-spin" /></div>;
   if (error) return <div className="text-center text-red-500 font-medium py-10">{error}</div>;
@@ -160,7 +161,8 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
             onFollow={handleFollow}
             savedPostIds={savedPostIds}
             followingUsernames={followingUsernames}
-            onCommentSubmit={(postId: string, text: string) => handleCommentSubmit(postId, text)}
+            // 🚨 CLEAN REFERENCE: Much better for React's rendering engine
+            onCommentSubmit={handleCommentSubmit}
           />
         ))
       )}

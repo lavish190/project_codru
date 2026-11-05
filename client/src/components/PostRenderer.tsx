@@ -75,22 +75,18 @@ const PostRenderer: React.FC<PostRendererProps> = ({ content }) => {
     });
   };
 
-  // 🚨 3. INJECT STYLES INTO HTML (Catches hidden Tiptap spaces!)
   const formatHtmlTags = (htmlString: string) => {
     if (!htmlString) return "";
     
-    // The upgraded regex catches normal spaces, HTML tags, non-breaking spaces (&nbsp;), and zero-width spaces (\u200B)
     return htmlString
-      .replace(/(^|[\s>\u00A0\u200B]|&nbsp;)(@[\w_.]+)/g, '$1<span data-type="mention" class="text-brand-orange font-bold cursor-pointer hover:underline bg-brand-orange/10 px-1 rounded-md" style="color: #f97316; font-weight: bold;">$2</span>')
-      .replace(/(^|[\s>\u00A0\u200B]|&nbsp;)(#[\w_]+)/g, '$1<span data-type="hashtag" class="text-brand-blue font-bold cursor-pointer hover:underline bg-brand-blue/10 px-1 rounded-md" style="color: #3b82f6; font-weight: bold;">$2</span>');
+      .replace(/(^|[\s>\u00A0\u200B]|&nbsp;)(@[\w_.]+)/g, '$1<span data-type="mention" class="text-brand-orange font-bold cursor-pointer hover:underline bg-brand-orange/10 px-1 rounded-md" style="color: #ed7f23; font-weight: bold;">$2</span>')
+      .replace(/(^|[\s>\u00A0\u200B]|&nbsp;)(#[\w_]+)/g, '$1<span data-type="hashtag" class="text-brand-blue font-bold cursor-pointer hover:underline bg-brand-blue/10 px-1 rounded-md" style="color: #1765a4; font-weight: bold;">$2</span>');
   };
 
   const rawContent = isHtml ? formatHtmlTags(safeContent) : safeContent;
 
-  // 🚨 4. SECURE DOMPURIFY
   const sanitizedContent = DOMPurify.sanitize(rawContent, {
     ADD_ATTR: ['data-type', 'data-id', 'target', 'rel', 'class', 'style'],
-    // Added 'br' so line breaks don't get stripped!
     ADD_TAGS: ['span', 'div', 'p', 'ul', 'ol', 'li', 'strong', 'em', 's', 'a', 'br'],
     ALLOWED_URI_REGEXP: /^(https?|mailto|tel|data:image\/)/i 
   });
@@ -106,12 +102,14 @@ const PostRenderer: React.FC<PostRendererProps> = ({ content }) => {
           .tiptap-content strong { font-weight: bold; }
           .tiptap-content em { font-style: italic; }
           .tiptap-content s { text-decoration: line-through; }
-          .tiptap-content a { color: #3b82f6; text-decoration: underline; cursor: pointer; }
           
-          /* Fallback CSS for badges in case Tailwind purges the strings */
-          .tiptap-content [data-type="mention"] { background-color: #fff7ed; border-radius: 0.375rem; padding: 0.125rem 0.375rem; }
+          /* Updated link color to match brand blue */
+          .tiptap-content a { color: #1765a4; text-decoration: underline; cursor: pointer; }
+          
+          /* Fallback CSS for badges in case Tailwind purges the strings (Matched to your exact brand opacity) */
+          .tiptap-content [data-type="mention"] { background-color: rgba(237, 127, 35, 0.1); border-radius: 0.375rem; padding: 0.125rem 0.375rem; }
           .tiptap-content [data-type="mention"]:hover { text-decoration: underline; }
-          .tiptap-content [data-type="hashtag"] { background-color: #eff6ff; border-radius: 0.375rem; padding: 0.125rem 0.375rem; }
+          .tiptap-content [data-type="hashtag"] { background-color: rgba(23, 101, 164, 0.1); border-radius: 0.375rem; padding: 0.125rem 0.375rem; }
           .tiptap-content [data-type="hashtag"]:hover { text-decoration: underline; }
         `}
       </style>
