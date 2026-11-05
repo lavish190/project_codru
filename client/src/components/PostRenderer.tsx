@@ -65,7 +65,7 @@ const PostRenderer: React.FC<PostRendererProps> = ({ content }) => {
           <span 
             key={i} 
             onClick={(e) => { e.stopPropagation(); navigate(`/explore?tag=${part.replace("#", "")}`); }}
-            className="text-brand-blue font-bold cursor-pointer hover:underline bg-brand-blue/10 px-1 rounded-md inline-block"
+            className="text-blue-500 font-bold cursor-pointer hover:underline bg-blue-500/10 px-1 rounded-md inline-block"
           >
             {part}
           </span>
@@ -80,7 +80,7 @@ const PostRenderer: React.FC<PostRendererProps> = ({ content }) => {
     
     return htmlString
       .replace(/(^|[\s>\u00A0\u200B]|&nbsp;)(@[\w_.]+)/g, '$1<span data-type="mention" class="text-brand-orange font-bold cursor-pointer hover:underline bg-brand-orange/10 px-1 rounded-md" style="color: #ed7f23; font-weight: bold;">$2</span>')
-      .replace(/(^|[\s>\u00A0\u200B]|&nbsp;)(#[\w_]+)/g, '$1<span data-type="hashtag" class="text-brand-blue font-bold cursor-pointer hover:underline bg-brand-blue/10 px-1 rounded-md" style="color: #1765a4; font-weight: bold;">$2</span>');
+      .replace(/(^|[\s>\u00A0\u200B]|&nbsp;)(#[\w_]+)/g, '$1<span data-type="hashtag" class="text-blue-500 font-bold cursor-pointer hover:underline bg-blue-500/10 px-1 rounded-md" style="color: #3b82f6; font-weight: bold;">$2</span>');
   };
 
   const rawContent = isHtml ? formatHtmlTags(safeContent) : safeContent;
@@ -106,10 +106,10 @@ const PostRenderer: React.FC<PostRendererProps> = ({ content }) => {
           /* Updated link color to match brand blue */
           .tiptap-content a { color: #1765a4; text-decoration: underline; cursor: pointer; }
           
-          /* Fallback CSS for badges in case Tailwind purges the strings (Matched to your exact brand opacity) */
+          /* Fallback CSS for badges in case Tailwind purges the strings*/
           .tiptap-content [data-type="mention"] { background-color: rgba(237, 127, 35, 0.1); border-radius: 0.375rem; padding: 0.125rem 0.375rem; }
           .tiptap-content [data-type="mention"]:hover { text-decoration: underline; }
-          .tiptap-content [data-type="hashtag"] { background-color: rgba(23, 101, 164, 0.1); border-radius: 0.375rem; padding: 0.125rem 0.375rem; }
+          .tiptap-content [data-type="hashtag"] { background-color: rgba(59, 130, 246, 0.1); border-radius: 0.375rem; padding: 0.125rem 0.375rem; }
           .tiptap-content [data-type="hashtag"]:hover { text-decoration: underline; }
         `}
       </style>
