@@ -8,7 +8,6 @@ import PostCard from "./PostCard";
 interface MyPostsProps {
   preloadedPosts?: any[];
   isOwner?: boolean;
-  // 🚨 NEW: Smart flag to detect if we are on the public profile
   isPublicProfile?: boolean; 
 }
 

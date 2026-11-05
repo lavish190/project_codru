@@ -118,6 +118,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
   });
 
   const [overviewStats, setOverviewStats] = useState<any>(null);
+  const [isOverviewLoading, setIsOverviewLoading] = useState(true);
 
   useEffect(() => {
     const checkTeamStatus = async () => {
@@ -163,6 +164,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
 
   useEffect(() => {
       const fetchOverviewData = async () => {
+          setIsOverviewLoading(true); // 🚨 Start loading
           try {
               const token = localStorage.getItem("jwtoken");
               const res = await fetch(`${import.meta.env.VITE_API}dashboard-overview`, {
@@ -174,20 +176,22 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
               }
           } catch (err) {
               console.error("Overview fetch failed", err);
+          } finally {
+              setIsOverviewLoading(false); // 🚨 Stop loading
           }
       };
       fetchOverviewData();
-  }, [userData.Role]); // Refetch if role changes
+  }, [userData.Role]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const urlToken = params.get("token");
+  // useEffect(() => {
+  //   const params = new URLSearchParams(window.location.search);
+  //   const urlToken = params.get("token");
 
-    if (urlToken) {
-      localStorage.setItem("jwtoken", urlToken);
-      window.history.replaceState({}, document.title, "/dashboard");
-    }
-  }, []);
+  //   if (urlToken) {
+  //     localStorage.setItem("jwtoken", urlToken);
+  //     window.history.replaceState({}, document.title, "/dashboard");
+  //   }
+  // }, []);
 
   useEffect(() => {
     const stateView = location.state?.targetView;
@@ -760,7 +764,15 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
             `}>
               
               {/* COMPONENT RENDERING ROUTER */}
-              {currentView === "Overview" && <Overview user={userData} data={overviewStats} />}
+              {currentView === "Overview" && (
+                isOverviewLoading ? (
+                  <div className="flex justify-center items-center h-64">
+                    <Loader2 className="w-10 h-10 animate-spin text-brand-orange" />
+                  </div>
+                ) : (
+                  <Overview user={userData} data={overviewStats} />
+                )
+              )}
               {currentView === "profile" && <Profile />}
               {currentView === "schedule" && <Calendar role={userData.Role || "student"} currentUserId={userData._id} />}
               {currentView === "settings" && <SettingsPanel userData={userData} setUserData={setUserData} />}
