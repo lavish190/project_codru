@@ -4,6 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Loader2, Grid } from "lucide-react";
 import Publicprofilepopup from "./Publicprofilepopup";
 import MyPosts from "./MyPosts";
+import { optimizeImage } from "../utils/image";
 
 function Publicprofile() {
   const { username } = useParams();
@@ -122,7 +123,7 @@ function Publicprofile() {
         {/* Avatar */}
         <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full overflow-hidden border-4 border-white shadow-lg shrink-0 bg-brand-orange/10 flex items-center justify-center">
           {user.photo ? (
-            <img src={user.photo} alt={user.name} className="w-full h-full object-cover" />
+            <img src={optimizeImage(user.photo)} alt={user.name} className="w-full h-full object-cover" />
           ) : (
             <span className="text-5xl font-bold text-brand-orange">{user.name?.charAt(0).toUpperCase()}</span>
           )}

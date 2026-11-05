@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, Pen, User, LogOut, FileText, Loader2, Shield, Users, Home } from "lucide-react";
 import Muialert from "./Muialert";
+import { optimizeImage } from "../utils/image";
 
 interface NavprofileProps {
   setShowProfile: (show: boolean) => void;
@@ -161,7 +162,7 @@ export default function Navprofile({
               </div>
             )}
             {userData?.Photo ? (
-              <img src={userData.Photo} alt="Profile" className="w-full h-full object-cover" />
+              <img src={optimizeImage(userData.Photo)} alt="Profile" className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full bg-orange-50 flex items-center justify-center text-brand-orange">
                 <User className="w-8 h-8" />

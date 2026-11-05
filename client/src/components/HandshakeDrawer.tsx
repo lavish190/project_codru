@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Loader2, Check, X, Calendar, Sparkles, ChevronRight, MessageCircleHeart } from "lucide-react";
 import Muialert from "./Muialert";
 import { socket } from '../socket';
+import { optimizeImage } from "../utils/image";
 
 const HandshakeDrawer = () => {
   const [requests, setRequests] = useState<any[]>([]);
@@ -143,7 +144,7 @@ const HandshakeDrawer = () => {
               <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-brand-orange to-brand-blue" />
               
               <div className="flex items-center gap-3 mb-4">
-                <img src={req.sender?.photo || "https://via.placeholder.com/150"} className="w-12 h-12 rounded-full object-cover shadow-sm border border-slate-100" />
+                <img src={optimizeImage(req.sender?.photo) || "https://via.placeholder.com/150"} className="w-12 h-12 rounded-full object-cover shadow-sm border border-slate-100" />
                 <div>
                   <h3 className="text-base font-bold text-slate-800 leading-tight">{req.sender?.name}</h3>
                   <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full mt-1 inline-block ${

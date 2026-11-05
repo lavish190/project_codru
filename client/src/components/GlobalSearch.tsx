@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, Loader2, X, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { optimizeImage } from "../utils/image";
 
 const GlobalSearch = () => {
   const [query, setQuery] = useState("");
@@ -107,7 +108,7 @@ const GlobalSearch = () => {
                     >
                       <div className="w-10 h-10 rounded-full overflow-hidden bg-brand-orange/10 flex items-center justify-center shrink-0">
                         {user.photo ? (
-                          <img src={user.photo} className="w-full h-full object-cover" />
+                          <img src={optimizeImage(user.photo)} className="w-full h-full object-cover" />
                         ) : (
                           <span className="text-brand-orange font-bold text-xs">{user.name?.charAt(0)}</span>
                         )}

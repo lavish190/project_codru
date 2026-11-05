@@ -4,6 +4,7 @@ import { Edit, Trash2, Loader2, FileText, Calendar } from "lucide-react";
 import Muialert from "./Muialert";
 import CreateBlog from "./CreateBlog"; // 🚨 IMPORT THE UNIFIED COMPONENT
 import { UserData } from "../App";
+import { optimizeImage } from "../utils/image";
 
 interface ManageBlogsProps {
   userData: UserData;
@@ -96,7 +97,7 @@ const ManageBlogs = ({ userData }: ManageBlogsProps) => {
                   <tr key={blog._id} className="hover:bg-slate-50 transition-colors group">
                     <td className="p-4 pl-6 flex items-center gap-4">
                       <div className="w-16 h-12 rounded-lg overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
-                        <img src={blog.coverImage} className="w-full h-full object-cover" alt="cover" />
+                        <img src={optimizeImage(blog.coverImage)} className="w-full h-full object-cover" alt="cover" />
                       </div>
                       <div className="min-w-0 max-w-xs md:max-w-md">
                         <p className="font-bold text-gray-800 truncate">{blog.title}</p>

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { useNavigate, NavLink, useParams, useLocation } from "react-router-dom";
 import { List, ListItem, ListItemButton, ListItemText, ListItemIcon } from "@mui/material";
 import { 
@@ -26,34 +26,40 @@ import {
   Settings2
 } from "lucide-react";
 
-// Components
-import CRM from './CRM';
-import Admin from "./Admin";
-import PlanetryPath from "./PlanetryPath";
-import MyPosts from "./MyPosts";
-import SavedPosts from "./SavedPosts";
+// 1. Keep universal components statically imported (everyone needs these instantly)
+import Overview from './Overview';
 import Profile from "./Profile";
 import SettingsPanel from "./SettingsPanel";
-import StudentManagement from "./StudentManagement";
-import Calendar from "./Calendar";
-import { SyllabusTracker } from "./SyllabusTracker"; 
-import Muialert from "./Muialert";
-import { UserData } from "../App";
-import MyCourses from "./MyCourses";
-import BulkEmails from "./BulkEmails";
-import AdminAuditLog from "./AdminAuditLog";
 import Notification from "./Notification";
-import ExpertConnect from "./ExpertConnect";
-import HandshakeDrawer from "./HandshakeDrawer";
-import WhatsAppChat from "./WhatsAppChat";
-import { AnimatePresence, motion } from "framer-motion";
 import Navprofile from "./Navprofile";
-import Overview from './Overview';
-import AdminInternship from "./AdminInternship";
-import CounselorSchedule from "./CounselorSchedule"; 
-import CounselorAdmissionsDesk from "./CounselorAdmissionsDesk";
-import CreateBlog from "./CreateBlog";
-import ManageBlogs from "./ManageBlogs";
+import MyPosts from "./MyPosts";
+import SavedPosts from "./SavedPosts";
+import Calendar from "./Calendar";
+import Muialert from "./Muialert";
+import { optimizeImage } from "../utils/image";
+import { UserData } from "../App";
+import { AnimatePresence, motion } from "framer-motion";
+
+// 2. LAZY LOAD Role-Specific Components (Users only download what they can access!)
+const Admin = lazy(() => import("./Admin"));
+const CRM = lazy(() => import("./CRM"));
+const BulkEmails = lazy(() => import("./BulkEmails"));
+const AdminAuditLog = lazy(() => import("./AdminAuditLog"));
+const AdminInternship = lazy(() => import("./AdminInternship"));
+const WhatsAppChat = lazy(() => import("./WhatsAppChat"));
+
+const StudentManagement = lazy(() => import("./StudentManagement"));
+const SyllabusTracker = lazy(() => import("./SyllabusTracker"));
+const MyCourses = lazy(() => import("./MyCourses"));
+const PlanetryPath = lazy(() => import("./PlanetryPath"));
+
+const CounselorSchedule = lazy(() => import("./CounselorSchedule"));
+const CounselorAdmissionsDesk = lazy(() => import("./CounselorAdmissionsDesk"));
+
+const CreateBlog = lazy(() => import("./CreateBlog"));
+const ManageBlogs = lazy(() => import("./ManageBlogs"));
+const ExpertConnect = lazy(() => import("./ExpertConnect"));
+const HandshakeDrawer = lazy(() => import("./HandshakeDrawer"));
 
 
 interface DashboardProps {
@@ -93,6 +99,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
   // Global State for Teachers to select a student
   const [teacherStudents, setTeacherStudents] = useState<any[]>([]);
   const [selectedStudentUsername, setSelectedStudentUsername] = useState<string | null>(null);
+  const [cachedMyPosts, setCachedMyPosts] = useState<any[] | null>(null);
 
   const [currentView, setCurrentView] = useState(() => {
     return location.state?.targetView?.toLowerCase() || localStorage.getItem("currentView") || "Overview";
@@ -263,7 +270,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
     }
   }, [isPremiumTeacher]);
 
-  const handleNavigation = (path: string) => navigate(path);
+  const handleNavigation = React.useCallback((path: string) => navigate(path), [navigate]);
 
   const handlePhotoInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -299,7 +306,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
     }
   };
 
-  const SignOut = async () => {
+  const SignOut = React.useCallback(async () => {
     try {
       const res = await fetch(`${import.meta.env.VITE_API}signout`, {
         method: "POST", 
@@ -311,7 +318,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         localStorage.removeItem("Username");
         localStorage.removeItem("Photo");
         navigate("/");
-        window.location.reload(); // 🚨 Flushes all leftover React state from memory
+        window.location.reload();
       } else {
         const data = await res.json();
         setAlertSeverity("error"); 
@@ -319,14 +326,13 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         setShowAlert(true);
       }
     } catch (error) {
-      // 🚨 Fallback if the server is down
       localStorage.removeItem("jwtoken"); 
       localStorage.removeItem("Username");
       localStorage.removeItem("Photo");
       navigate("/");
       window.location.reload();
     }
-  };
+  },[navigate]);
 
   const handleRequestApproval = async () => {
     setIsRequesting(true);
@@ -368,7 +374,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
     }
   };
 
-  const getDrawerContent = () => {
+  const getDrawerContent = React.useMemo(() => {
     const basicItems = [
       { text: "Home", icon: <Home size={22} />, path: "/", mobileHidden: true },
       { text: "Overview", icon: <LayoutDashboard size={22} />, view: "Overview" },
@@ -532,7 +538,19 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         
       </List>
     );
-  };
+  },[
+    // React will ONLY rebuild the sidebar if one of these exact values changes
+    activeTab, 
+    isPremiumTeacher, 
+    isUnverifiedTeacher, 
+    isParent, 
+    isUnverifiedParent, 
+    isCounselor, 
+    isTeamMember, 
+    userData.isAdmin,
+    handleNavigation,
+    SignOut
+  ]);
 
   return (
     <div className="fixed inset-0 flex h-dvh w-full bg-slate-50 overflow-hidden font-body overscroll-none">
@@ -555,7 +573,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
               </div>
             )}
             {userData.Photo ? (
-              <img src={userData.Photo} alt="Profile" className="w-20 h-20 rounded-full shadow-md border-4 border-white object-cover" referrerPolicy="no-referrer" />
+              <img src={optimizeImage(userData.Photo)} alt="Profile" className="w-20 h-20 rounded-full shadow-md border-4 border-white object-cover" referrerPolicy="no-referrer" />
             ) : (
               <div className="w-20 h-20 rounded-full bg-brand-orange flex items-center justify-center text-white text-2xl font-bold shadow-md border-4 border-white">
                 {userData.Name ? userData.Name.charAt(0).toUpperCase() : "U"}
@@ -573,7 +591,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         </div>
 
         <div className="flex-1 overflow-hidden flex flex-col mt-4">
-          {getDrawerContent()}
+          {getDrawerContent}
         </div>
       </div>
 
@@ -719,7 +737,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
                     return (
                       <button key={student.username} onClick={() => setSelectedStudentUsername(student.username)} className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition whitespace-nowrap ${isSelected ? 'border-brand-blue bg-blue-50 shadow-sm' : 'border-gray-200 hover:border-brand-blue hover:bg-blue-50/50'}`}>
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold overflow-hidden ${isSelected ? 'bg-brand-blue text-white border-2 border-brand-blue' : 'bg-brand-blue/10 text-brand-blue'}`}>
-                          {student.photo || student.Photo ? <img src={student.photo || student.Photo} alt={student.name} className="w-full h-full object-cover" /> : (student.name ? student.name.charAt(0).toUpperCase() : 'U')}
+                          {student.photo || student.Photo ? <img src={optimizeImage(student.photo || student.Photo)} alt={student.name} className="w-full h-full object-cover" /> : (student.name ? student.name.charAt(0).toUpperCase() : 'U')}
                         </div>
                         <span className={`text-sm ${isSelected ? 'font-bold text-brand-blue' : 'font-medium text-gray-700'}`}>{student.name ? student.name.split(' ')[0] : student.username}</span>
                       </button>
@@ -762,68 +780,73 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
               ? "h-full" 
               : "min-h-full pb-8 md:pb-10"} rounded-lg
             `}>
-              
-              {/* COMPONENT RENDERING ROUTER */}
-              {currentView === "Overview" && (
-                isOverviewLoading ? (
-                  <div className="flex justify-center items-center h-64">
-                    <Loader2 className="w-10 h-10 animate-spin text-brand-orange" />
-                  </div>
-                ) : (
-                  <Overview user={userData} data={overviewStats} />
-                )
-              )}
-              {currentView === "profile" && <Profile />}
-              {currentView === "schedule" && <Calendar role={userData.Role || "student"} currentUserId={userData._id} />}
-              {currentView === "settings" && <SettingsPanel userData={userData} setUserData={setUserData} />}
-              {currentView === "saved-posts" && <SavedPosts />}
-              {currentView === "my-posts" && <MyPosts />}
-              {currentView === "counselor-schedule" && isCounselor && <CounselorSchedule />} {/* 🚨 NEW COMPONENT INJECTED */}
-              {currentView === "admissions-desk" && isCounselor && <CounselorAdmissionsDesk userData={userData} />}
-              {currentView === "syllabus" && !isParent && <SyllabusTracker role={userData.Role || "student"} selectedStudentUsername={selectedStudentUsername} />}
-              {currentView === "my-courses" && !isParent && <MyCourses role={userData.Role} selectedStudentUsername={selectedStudentUsername || undefined} />}
-              {currentView === "report" && userData?.Role?.toLowerCase() === "student" && <PlanetryPath />}
-              {currentView === "management" && isPremiumTeacher && <StudentManagement userData={userData} />}
-              {currentView === "manage-users" && userData?.isAdmin && <Admin />}
-              {currentView === "admin-audit-log" && userData?.isAdmin && <AdminAuditLog />}
-              {currentView === "whatsapp-crm" && userData?.isAdmin && <WhatsAppChat />}
-              {currentView === "crm" && userData?.isAdmin && <CRM />}
-              {currentView === "bulk-emails" && userData?.isAdmin && <BulkEmails userData={userData} />}
-              {currentView === "admin-internship" && userData?.isAdmin && <AdminInternship />}
-              {currentView === "create-blog" && isTeamMember && <CreateBlog userData={userData} />}
-              {currentView === "manage-blogs" && isTeamMember && <ManageBlogs userData={userData} />}
-
-              {currentView === "the-village" && isParent && (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <div className="w-24 h-24 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4">
-                    <Heart size={48} />
-                  </div>
-                  <h2 className="text-3xl font-display font-bold text-gray-800">The Village</h2>
-                  <p className="text-gray-500 mt-2 max-w-md mx-auto">An anonymous, safe space to ask parenting questions and receive guidance from experts and students.</p>
-                  <p className="text-sm font-bold text-rose-500 mt-4 uppercase tracking-widest bg-rose-50 px-4 py-2 rounded-full">Coming Soon</p>
+              <Suspense fallback={
+                <div className="flex justify-center items-center h-64">
+                  <Loader2 className="w-10 h-10 animate-spin text-brand-orange" />
                 </div>
-              )}
-              {currentView === "expert-connect" && isParent && (
-                isVerifiedParent ? (
-                  <ExpertConnect userData={userData} /> 
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                    <div className="w-24 h-24 bg-rose-50 text-rose-300 rounded-full flex items-center justify-center mb-6">
-                      <ShieldAlert size={48} />
+              }>
+                {/* COMPONENT RENDERING ROUTER */}
+                {currentView === "Overview" && (
+                  isOverviewLoading ? (
+                    <div className="flex justify-center items-center h-64">
+                      <Loader2 className="w-10 h-10 animate-spin text-brand-orange" />
                     </div>
-                    <h2 className="text-2xl font-bold text-gray-800">Verification Required</h2>
-                    <p className="text-gray-500 mt-3 max-w-md mx-auto leading-relaxed">
-                      To protect our community and ensure a safe space, please request Admin Verification to unlock direct 1-on-1 messaging.
-                    </p>
-                    <button 
-                      onClick={() => setShowUnlockModal(true)}
-                      className="mt-8 px-8 py-3.5 bg-rose-500 text-white font-black tracking-wide rounded-full hover:bg-rose-600 transition shadow-lg shadow-rose-500/30 active:scale-95"
-                    >
-                      REQUEST VERIFICATION
-                    </button>
+                  ) : (
+                    <Overview user={userData} data={overviewStats} />
+                  )
+                )}
+                {currentView === "profile" && <Profile />}
+                {currentView === "schedule" && <Calendar role={userData.Role || "student"} currentUserId={userData._id} />}
+                {currentView === "settings" && <SettingsPanel userData={userData} setUserData={setUserData} />}
+                {currentView === "saved-posts" && <SavedPosts />}
+                {currentView === "my-posts" && <MyPosts preloadedPosts={cachedMyPosts} onPostsUpdate={setCachedMyPosts} />}
+                {currentView === "counselor-schedule" && isCounselor && <CounselorSchedule />}
+                {currentView === "admissions-desk" && isCounselor && <CounselorAdmissionsDesk userData={userData} />}
+                {currentView === "syllabus" && !isParent && <SyllabusTracker role={userData.Role || "student"} selectedStudentUsername={selectedStudentUsername} />}
+                {currentView === "my-courses" && !isParent && <MyCourses role={userData.Role} selectedStudentUsername={selectedStudentUsername || undefined} />}
+                {currentView === "report" && userData?.Role?.toLowerCase() === "student" && <PlanetryPath />}
+                {currentView === "management" && isPremiumTeacher && <StudentManagement userData={userData} />}
+                {currentView === "manage-users" && userData?.isAdmin && <Admin />}
+                {currentView === "admin-audit-log" && userData?.isAdmin && <AdminAuditLog />}
+                {currentView === "whatsapp-crm" && userData?.isAdmin && <WhatsAppChat />}
+                {currentView === "crm" && userData?.isAdmin && <CRM />}
+                {currentView === "bulk-emails" && userData?.isAdmin && <BulkEmails userData={userData} />}
+                {currentView === "admin-internship" && userData?.isAdmin && <AdminInternship />}
+                {currentView === "create-blog" && isTeamMember && <CreateBlog userData={userData} />}
+                {currentView === "manage-blogs" && isTeamMember && <ManageBlogs userData={userData} />}
+
+                {currentView === "the-village" && isParent && (
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <div className="w-24 h-24 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4">
+                      <Heart size={48} />
+                    </div>
+                    <h2 className="text-3xl font-display font-bold text-gray-800">The Village</h2>
+                    <p className="text-gray-500 mt-2 max-w-md mx-auto">An anonymous, safe space to ask parenting questions and receive guidance from experts and students.</p>
+                    <p className="text-sm font-bold text-rose-500 mt-4 uppercase tracking-widest bg-rose-50 px-4 py-2 rounded-full">Coming Soon</p>
                   </div>
-                )
-              )}
+                )}
+                {currentView === "expert-connect" && isParent && (
+                  isVerifiedParent ? (
+                    <ExpertConnect userData={userData} /> 
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                      <div className="w-24 h-24 bg-rose-50 text-rose-300 rounded-full flex items-center justify-center mb-6">
+                        <ShieldAlert size={48} />
+                      </div>
+                      <h2 className="text-2xl font-bold text-gray-800">Verification Required</h2>
+                      <p className="text-gray-500 mt-3 max-w-md mx-auto leading-relaxed">
+                        To protect our community and ensure a safe space, please request Admin Verification to unlock direct 1-on-1 messaging.
+                      </p>
+                      <button 
+                        onClick={() => setShowUnlockModal(true)}
+                        className="mt-8 px-8 py-3.5 bg-rose-500 text-white font-black tracking-wide rounded-full hover:bg-rose-600 transition shadow-lg shadow-rose-500/30 active:scale-95"
+                      >
+                        REQUEST VERIFICATION
+                      </button>
+                    </div>
+                  )
+                )}
+              </Suspense>
               
 
             </div>
@@ -864,7 +887,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
           className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${showProfile ? "text-brand-orange" : "text-gray-400 hover:text-brand-orange"}`}
         >
           <div className={`w-6 h-6 rounded-full flex items-center justify-center overflow-hidden border-[1.5px] ${showProfile ? "border-brand-orange" : "border-transparent"}`}>
-            {userData?.Photo ? <img src={userData.Photo} alt="Profile" className="w-full h-full object-cover" /> : <User size={20} strokeWidth={2} className={showProfile ? "text-brand-orange" : "text-gray-400"} />}
+            {userData?.Photo ? <img src={optimizeImage(userData.Photo)} alt="Profile" className="w-full h-full object-cover" /> : <User size={20} strokeWidth={2} className={showProfile ? "text-brand-orange" : "text-gray-400"} />}
           </div>
           <span className="text-[10px] font-bold mt-1">Profile</span>
         </button>
@@ -970,7 +993,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
               {/* Profile Overview (Mimics Desktop exactly) */}
               <div className="flex flex-col items-center py-6 border-b border-gray-100 relative shrink-0">
                 <div className="w-20 h-20 rounded-full border-4 border-white shadow-md overflow-hidden bg-brand-orange text-white flex items-center justify-center text-2xl font-bold">
-                  {userData.Photo ? <img src={userData.Photo} alt="Profile" className="w-full h-full object-cover" /> : (userData.Name?.charAt(0).toUpperCase() || "U")}
+                  {userData.Photo ? <img src={optimizeImage(userData.Photo)} alt="Profile" className="w-full h-full object-cover" /> : (userData.Name?.charAt(0).toUpperCase() || "U")}
                 </div>
                 <h2 className="mt-4 text-lg font-display font-bold text-brand-blue">Hi, {userData.Name ? userData.Name.split(' ')[0] : "Explorer"}!</h2>
                 <p className="text-[10px] font-bold uppercase tracking-wider mt-1 text-gray-400">
@@ -980,7 +1003,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
 
               {/* 🚨 THE MAGIC: Calls the exact same List items as Desktop! */}
               <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col pt-2 pb-6">
-                {getDrawerContent()} 
+                {getDrawerContent} 
               </div>
             </motion.div>
           </>

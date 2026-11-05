@@ -7,6 +7,7 @@ import { UserData } from "../App";
 
 import Navprofile from "./Navprofile";
 import Notification from "./Notification";
+import { optimizeImage } from "../utils/image";
 
 interface NavbarProps {
   userData: UserData;
@@ -103,7 +104,7 @@ function Navbar({ userData, setUserData }: NavbarProps) {
                     className="w-10 h-10 rounded-full border-2 border-brand-orange p-0.5 overflow-hidden focus:outline-none transition transform hover:scale-105 relative"
                   >
                     {userData.Photo ? (
-                      <img src={userData.Photo} alt="Profile" className="w-full h-full rounded-full object-cover" />
+                      <img src={optimizeImage(userData.Photo)} alt="Profile" className="w-full h-full rounded-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-brand-orange/10 rounded-full flex items-center justify-center text-brand-orange">
                          <User className="w-5 h-5" />
@@ -223,7 +224,7 @@ function Navbar({ userData, setUserData }: NavbarProps) {
           >
             <div className={`w-6 h-6 rounded-full flex items-center justify-center overflow-hidden border-[1.5px] ${showProfile ? "border-brand-orange" : "border-transparent"}`}>
               {userData?.Photo ? (
-                <img src={userData.Photo} alt="Profile" className="w-full h-full object-cover" />
+                <img src={optimizeImage(userData.Photo)} alt="Profile" className="w-full h-full object-cover" />
               ) : (
                 <User size={20} strokeWidth={2} className={showProfile ? "text-brand-orange" : "text-gray-400"} />
               )}

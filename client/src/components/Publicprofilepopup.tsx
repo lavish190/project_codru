@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, Search, Loader2, UserMinus, UserPlus } from "lucide-react";
+import { optimizeImage } from "../utils/image";
 
 const Publicprofilepopup = ({
   type,
@@ -143,7 +144,7 @@ const Publicprofilepopup = ({
                 >
                   <div className="w-12 h-12 rounded-full overflow-hidden border border-gray-100 bg-brand-orange/10 flex items-center justify-center">
                     {user.photo ? (
-                      <img src={user.photo} alt={user.name} className="w-full h-full object-cover" />
+                      <img src={optimizeImage(user.photo)} alt={user.name} className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-brand-orange font-bold">{user.name?.charAt(0)}</span>
                     )}

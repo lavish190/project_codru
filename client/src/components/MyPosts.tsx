@@ -4,11 +4,13 @@ import { Loader2, Trash2, Edit3, X, Eye, Clock, FileText, CheckCircle2, ChevronL
 import PostRenderer from "./PostRenderer"; 
 import RichTextEditor from "./RichTextEditor"; 
 import PostCard from "./PostCard"; 
+import {optimizeImage} from "../utils/image";
 
 interface MyPostsProps {
-  preloadedPosts?: any[];
+  preloadedPosts?: any[] | null;
   isOwner?: boolean;
   isPublicProfile?: boolean; 
+  onPostsUpdate?: (posts: any[]) => void; // 🚨 CACHING: Syncs data back to Dashboard
 }
 
 const toLocalDatetimeInput = (dateString: string) => {
@@ -26,8 +28,12 @@ const formatDate = (dateString: string, includeTime: boolean = false) => {
   return new Date(dateString).toLocaleString('en-GB', options);
 };
 
-// 🚨 Notice the automatic detection: isPublicProfile = !!preloadedPosts
-const MyPosts = ({ preloadedPosts, isOwner = true, isPublicProfile = !!preloadedPosts }: MyPostsProps) => {
+const MyPosts = ({ 
+  preloadedPosts, 
+  isOwner = true, 
+  isPublicProfile = !!preloadedPosts && !isOwner, // Ensure Dashboard cache doesn't trigger Public logic
+  onPostsUpdate 
+}: MyPostsProps) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
@@ -55,10 +61,12 @@ const MyPosts = ({ preloadedPosts, isOwner = true, isPublicProfile = !!preloaded
       setLocalDraftSchedule(localStorage.getItem(`cute_post_schedule_draft_${currentUserId}`));
     }
 
-    if (preloadedPosts) {
+    // 🚨 SMART CACHE CHECK: If we have preloaded data, use it instantly
+    if (preloadedPosts !== undefined && preloadedPosts !== null) {
       setPosts(preloadedPosts);
       setIsLoading(false);
     } else {
+      // 🚨 Otherwise, fetch from the server and update the cache!
       const fetchDashboardPosts = async () => {
         try {
           const token = localStorage.getItem("jwtoken");
@@ -67,7 +75,9 @@ const MyPosts = ({ preloadedPosts, isOwner = true, isPublicProfile = !!preloaded
           });
           if (res.ok) {
             const data = await res.json();
-            setPosts(Array.isArray(data) ? data : (data.posts || data.blogs || []));
+            const finalData = Array.isArray(data) ? data : (data.posts || data.blogs || []);
+            setPosts(finalData);
+            if (onPostsUpdate) onPostsUpdate(finalData); // Save to Dashboard memory
           }
         } catch (error) {
           console.error("Dashboard error:", error);
@@ -77,7 +87,7 @@ const MyPosts = ({ preloadedPosts, isOwner = true, isPublicProfile = !!preloaded
       };
       fetchDashboardPosts();
     }
-  }, [preloadedPosts, currentUserId]);
+  }, [currentUserId]); // Removed preloadedPosts from array to prevent re-fetch loops
 
   const publishedPosts = posts.filter(p => p.status !== "scheduled");
   const scheduledPosts = posts.filter(p => p.status === "scheduled");
@@ -99,7 +109,12 @@ const MyPosts = ({ preloadedPosts, isOwner = true, isPublicProfile = !!preloaded
   const confirmDelete = async () => {
     if (!postToDelete) return;
     const originalPosts = [...posts];
-    setPosts(prev => prev.filter(p => p._id !== postToDelete));
+    
+    // 🚨 Optimistic UI + Cache Sync
+    const updatedPosts = posts.filter(p => p._id !== postToDelete);
+    setPosts(updatedPosts);
+    if (onPostsUpdate) onPostsUpdate(updatedPosts); 
+    
     const targetId = postToDelete;
     setPostToDelete(null);
     try {
@@ -108,7 +123,9 @@ const MyPosts = ({ preloadedPosts, isOwner = true, isPublicProfile = !!preloaded
       if (!res.ok) throw new Error("Failed to delete");
     } catch (error: any) {
       setErrorMsg("Failed to delete post. Please try again.");
+      // Rollback on failure
       setPosts(originalPosts); 
+      if (onPostsUpdate) onPostsUpdate(originalPosts); 
     }
   };
 
@@ -127,7 +144,12 @@ const MyPosts = ({ preloadedPosts, isOwner = true, isPublicProfile = !!preloaded
       });
       if (res.ok) {
         const updatedPost = await res.json();
-        setPosts(prev => prev.map(p => p._id === postToEdit._id ? updatedPost : p));
+        
+        // 🚨 Optimistic UI + Cache Sync
+        const newPosts = posts.map(p => p._id === postToEdit._id ? updatedPost : p);
+        setPosts(newPosts);
+        if (onPostsUpdate) onPostsUpdate(newPosts);
+        
         setPostToEdit(null); 
       } else throw new Error("Failed to update post");
     } catch (error: any) { setErrorMsg("Failed to update post."); }
@@ -182,13 +204,12 @@ const MyPosts = ({ preloadedPosts, isOwner = true, isPublicProfile = !!preloaded
             <div 
               key={post._id} 
               onClick={() => {
-                // 🚨 ONLY trigger feed view if we are on the Public Profile!
+                // ONLY trigger feed view if we are on the Public Profile!
                 if (isPublicProfile) {
                   setStartPostId(post._id);
                   setViewMode("feed");
                 }
               }}
-              // 🚨 Removes pointer cursor & hover shadow in Dashboard so it feels like a static management card
               className={`group bg-white rounded-2xl border border-gray-100 shadow-sm transition-all overflow-hidden h-64 relative flex flex-col ${isPublicProfile ? 'cursor-pointer hover:shadow-lg' : ''}`}
             >
               
@@ -209,7 +230,7 @@ const MyPosts = ({ preloadedPosts, isOwner = true, isPublicProfile = !!preloaded
 
               {post.imageUrl ? (
                 <div className="flex-1 relative overflow-hidden bg-gray-100">
-                  <img src={post.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="post" />
+                  <img src={optimizeImage(post.imageUrl)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="post" />
                   <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent"></div>
                   <div className="absolute bottom-3 left-3 right-3 text-white text-sm font-medium line-clamp-2 drop-shadow-md pointer-events-none">
                      <PostRenderer content={post.content} />
@@ -291,7 +312,7 @@ const MyPosts = ({ preloadedPosts, isOwner = true, isPublicProfile = !!preloaded
               <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
                 {postToPreview.imageUrl && (
                   <div className="w-full max-h-96 bg-gray-50 flex items-center justify-center overflow-hidden">
-                    <img src={postToPreview.imageUrl} className="w-full h-full object-contain" alt="preview" />
+                    <img src={optimizeImage(postToPreview.imageUrl)} className="w-full h-full object-contain" alt="preview" />
                   </div>
                 )}
                 <div className="p-4"><PostRenderer content={postToPreview.content} /></div>

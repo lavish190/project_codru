@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Search, Loader2, Hash, Users, LayoutList } from "lucide-react";
 import PostCard from "./PostCard"; // Adjust path if needed
+import { optimizeImage } from "../utils/image";
 
 export default function Explore({ currentUser }: any) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -138,7 +139,7 @@ export default function Explore({ currentUser }: any) {
                 {results.users.map((u: any) => (
                   <Link key={u._id} to={`/profile/${u.username}`} className="flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors">
                     <div className="w-12 h-12 rounded-full overflow-hidden bg-brand-orange/10 shrink-0">
-                      {u.photo ? <img src={u.photo} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-brand-orange font-bold">{u.name?.charAt(0)}</div>}
+                      {u.photo ? <img src={optimizeImage(u.photo)} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-brand-orange font-bold">{u.name?.charAt(0)}</div>}
                     </div>
                     <div>
                       <h4 className="font-bold text-gray-900">{u.name}</h4>

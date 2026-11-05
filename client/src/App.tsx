@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import {
   Route,
   Routes,
@@ -9,28 +9,31 @@ import {
 
 import { registerSW } from 'virtual:pwa-register';
 
-import PlanViewer from "./components/PlanViewer";
 import PwaInstallPrompt from "./PwaInstallPrompt";
-import CommunicationPortal from './components/CommunicationPortal';
 import Home from "./components/Home";
-import Signin from "./components/Signin";
-import Dashboard from "./components/Dashboard";
 import Navbar from "./components/Navbar";
-import Signup from "./components/Signup";
-import TaskForm from "./components/TaskForm";
-import SinglePost from "./components/SinglePost";
-import Publicprofile from "./components/Publicprofile";
 import Popup from "./components/Popup";
 import NotFound from "./components/NotFound";
-import SyllabusExplorer from "./components/SyllabusExplorer";
-import ForgetPassword from "./components/Forget_password";
-import InternshipPortal from "./components/InternshipPortal";
-import FinalBuy from "./components/FinalBuy";
-import PaymentHistory from "./components/PaymentHistory";
-import PaymentStatus from "./components/PaymentStatus";
-import EnrollPage from "./components/Enrol";
-import AdmissionPortal from "./components/Admission/AdmissionPortal";
-import Explore from "./components/Explore";
+
+const Dashboard = lazy(() => import("./components/Dashboard"));
+const Signin = lazy(() => import("./components/Signin"));
+const Signup = lazy(() => import("./components/Signup"));
+const Explore = lazy(() => import("./components/Explore"));
+const Publicprofile = lazy(() => import("./components/Publicprofile"));
+const SinglePost = lazy(() => import("./components/SinglePost"));
+const CommunicationPortal = lazy(() => import("./components/CommunicationPortal"));
+
+const SyllabusExplorer = lazy(() => import("./components/SyllabusExplorer"));
+const TaskForm = lazy(() => import("./components/TaskForm"));
+const PlanViewer = lazy(() => import("./components/PlanViewer"));
+
+const AdmissionPortal = lazy(() => import("./components/Admission/AdmissionPortal"));
+const InternshipPortal = lazy(() => import("./components/InternshipPortal"));
+
+const PaymentHistory = lazy(() => import("./components/PaymentHistory"));
+const PaymentStatus = lazy(() => import("./components/PaymentStatus"));
+const EnrollPage = lazy(() => import("./components/Enrol"));
+const ForgetPassword = lazy(() => import("./components/Forget_password"));
 
 // --- TYPESCRIPT DEFINITIONS ---
 export interface UserData {
@@ -513,170 +516,160 @@ function App() {
       ) : (
 
         <>
+          <Suspense fallback={
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+              <div className="w-8 h-8 border-4 border-brand-orange border-t-transparent rounded-full animate-spin" />
+            </div>
+          }>
+            <Routes>
 
-          <Routes>
-
-            <Route
-              path="/post/:postId"
-              element={
-                <SinglePost
-                  userData={userData}
-                />
-              }
-            />
-
-            <Route
-              path="/profile/:username"
-              element={<Publicprofile />}
-            />
-
-            <Route
-              path="/"
-              element={
-                <Home userData={userData} />
-              }
-            />
-
-            <Route
-              path="/signup"
-              element={
-                <PublicRoute>
-                  <Signup />
-                </PublicRoute>
-              }
-            />
-
-            <Route
-              path="/signin"
-              element={
-                <PublicRoute>
-                  <Signin
+              <Route
+                path="/post/:postId"
+                element={
+                  <SinglePost
                     userData={userData}
-                    setUserData={setUserData}
                   />
-                </PublicRoute>
-              }
-            />
+                }
+              />
 
-            <Route
-              path="/dashboard/*"
-              element={
-                <ProtectedRoute>
-                  <Dashboard
+              <Route
+                path="/profile/:username"
+                element={<Publicprofile />}
+              />
+
+              <Route
+                path="/"
+                element={
+                  <Home userData={userData} />
+                }
+              />
+
+              <Route
+                path="/signup"
+                element={
+                  <PublicRoute>
+                    <Signup />
+                  </PublicRoute>
+                }
+              />
+
+              <Route
+                path="/signin"
+                element={
+                  <PublicRoute>
+                    <Signin
+                      userData={userData}
+                      setUserData={setUserData}
+                    />
+                  </PublicRoute>
+                }
+              />
+
+              <Route
+                path="/dashboard/*"
+                element={
+                  <ProtectedRoute>
+                    <Dashboard
+                      userData={userData}
+                      setUserData={setUserData}
+                    />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/update-report/:username"
+                element={
+                  <ProtectedRoute>
+                    <TaskForm />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/forget-password/:token"
+                element={<ForgetPassword />}
+              />
+
+              <Route
+                path="/edit-syllabus"
+                element={
+                  <SyllabusExplorer
                     userData={userData}
-                    setUserData={setUserData}
                   />
-                </ProtectedRoute>
-              }
-            />
+                }
+              />
 
-            <Route
-              path="/update-report/:username"
-              element={
-                <ProtectedRoute>
-                  <TaskForm />
-                </ProtectedRoute>
-              }
-            />
+              <Route 
+                path="/explore" 
+                element={
+                  <Explore 
+                    currentUser={{ 
+                      id: localStorage.getItem("userId"), 
+                      photo: userData?.Photo 
+                    }} 
+                  />
+                } 
+              />
 
-            <Route
-              path="/forget-password/:token"
-              element={<ForgetPassword />}
-            />
+              <Route
+                path="/edit-syllabus/:username"
+                element={
+                  <SyllabusExplorer
+                    userData={userData}
+                  />
+                }
+              />
 
-            <Route
-              path="/edit-syllabus"
-              element={
-                <SyllabusExplorer
-                  userData={userData}
-                />
-              }
-            />
+              {/* PAYMENT SUCCESS */}
+              <Route
+                path="/payment-status"
+                element={<PaymentStatus />}
+              />
 
-            <Route 
-              path="/explore" 
-              element={
-                <Explore 
-                  currentUser={{ 
-                    id: localStorage.getItem("userId"), 
-                    photo: userData?.Photo 
-                  }} 
-                />
-              } 
-            />
+              {/* PAYMENT HISTORY */}
+              <Route
+                path="/payment-history"
+                element={<PaymentHistory />}
+              />
 
-            <Route
-              path="/edit-syllabus/:username"
-              element={
-                <SyllabusExplorer
-                  userData={userData}
-                />
-              }
-            />
+              {/* ENROLLMENT PAGE */}
+              <Route
+                path="/enroll"
+                element={<EnrollPage />}
+              />
+              {/* INTERNSHIP PORTAL */}
+              <Route
+                path="/work-with-us"
+                element={<InternshipPortal />}
+              />
 
-            {/* PAYMENT SUCCESS */}
-            <Route
-              path="/payment-status" // Note: PhonePe is currently configured to redirect to this URL
-              element={<PaymentStatus />}
-            />
-            {/* FINAL BUY */}
-            <Route
-              path="/finalBuy"
-              element={<FinalBuy />}
-            />
+              <Route 
+                path="/plan-details/:id" 
+                element={<PlanViewer />} 
+              />
 
-            {/* PAYMENT HISTORY */}
-            <Route
-              path="/payment-history"
-              element={<PaymentHistory />}
-            />
+              <Route
+                path="//homeschool-application"
+                element={<AdmissionPortal />}
+              />
 
-            {/* ENROLLMENT PAGE */}
-            <Route
-              path="/enroll"
-              element={<EnrollPage />}
-            />
-            {/* INTERNSHIP PORTAL */}
-            <Route
-              path="/work-with-us"
-              element={<InternshipPortal />}
-            />
+              {/* NOT FOUND */}
+              <Route
+                path="*"
+                element={<NotFound />}
+              />
 
-            <Route 
-              path="/plan-details/:id" 
-              element={<PlanViewer />} 
-            />
+            </Routes>
 
-            <Route
-              path="//homeschool-application"
-              element={
-                
-                  <AdmissionPortal />
-            
-              }
-            />
-
-            {/* NOT FOUND */}
-            <Route
-              path="*"
-              element={<NotFound />}
-            />
-
-          </Routes>
-
-          {isAuth && (
-            <CommunicationPortal />
-          )}
-
+            {isAuth && (
+              <CommunicationPortal />
+            )}
+          </Suspense>
         </>
-        
-
       )}
-
     </div>
-
   );
-
 }
 
 export default App;
