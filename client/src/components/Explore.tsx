@@ -3,7 +3,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { Search, Loader2, Hash, Users, LayoutList } from "lucide-react";
 import PostCard from "./PostCard"; // Adjust path if needed
 
-export default function Explore({ currentUser, userData }: any) {
+export default function Explore({ currentUser }: any) {
   const [searchParams, setSearchParams] = useSearchParams();
   
   // Accept either ?q= (from the search bar) or ?tag= (from clicking a hashtag)
@@ -14,6 +14,10 @@ export default function Explore({ currentUser, userData }: any) {
   
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState({ users: [], posts: [] });
+
+  // Swipe State
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
   // Fetch results whenever the URL query changes
   useEffect(() => {
@@ -47,10 +51,43 @@ export default function Explore({ currentUser, userData }: any) {
     if (query.trim()) setSearchParams({ q: query.trim() });
   };
 
+  // ==========================================
+  // MOBILE SWIPE LOGIC
+  // ==========================================
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null); // Reset touch end to prevent false positives
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const minSwipeDistance = 50; // Minimum pixel drag to register as a swipe
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    const tabs = ["top", "accounts", "tags"] as const;
+    const currentIndex = tabs.indexOf(activeTab);
+
+    // Swiped left (Go to next tab)
+    if (isLeftSwipe && currentIndex < tabs.length - 1) {
+      setActiveTab(tabs[currentIndex + 1]);
+    }
+    // Swiped right (Go to previous tab)
+    if (isRightSwipe && currentIndex > 0) {
+      setActiveTab(tabs[currentIndex - 1]);
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto pt-4 sm:pt-8 pb-24 px-4 sm:px-0 animate-in fade-in duration-500">
       
-      {/* Mobile Search Bar (Since Navbar search might be hidden on tiny screens) */}
+      {/* Mobile Search Bar */}
       <form onSubmit={handleSearch} className="md:hidden relative mb-6">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
         <input 
@@ -82,11 +119,16 @@ export default function Explore({ currentUser, userData }: any) {
         </div>
       )}
 
-      {/* Results Content */}
+      {/* Results Content (Wrapped with swipe touch listeners) */}
       {!isLoading && (
-        <div className="space-y-6">
+        <div 
+          className="space-y-6 min-h-[60vh]"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
           
-          {/* ACCOUNTS VIEW (Or Top view with users) */}
+          {/* ACCOUNTS VIEW */}
           {(activeTab === "accounts" || activeTab === "top") && results.users.length > 0 && (
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50">
@@ -117,7 +159,6 @@ export default function Explore({ currentUser, userData }: any) {
                   key={post._id} 
                   post={post} 
                   currentUser={currentUser} 
-                  // Pass down your standard handlers here (onLike, onSave, etc)
                 />
               ))}
             </div>
@@ -125,7 +166,7 @@ export default function Explore({ currentUser, userData }: any) {
 
           {/* EMPTY STATE */}
           {!isLoading && results.users.length === 0 && results.posts.length === 0 && initialQuery && (
-            <div className="text-center py-20">
+            <div className="text-center py-20 pointer-events-none">
               <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Search className="w-10 h-10 text-gray-400" />
               </div>
