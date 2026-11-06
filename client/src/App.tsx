@@ -112,13 +112,9 @@ function App() {
   useEffect(() => {
 
     const handleOnline = () => setIsOnline(true);
-
     const handleOffline = () => setIsOnline(false);
-
     window.addEventListener('online', handleOnline);
-
     window.addEventListener('offline', handleOffline);
-
     return () => {
 
       window.removeEventListener(
@@ -132,7 +128,6 @@ function App() {
       );
 
     };
-
   }, []);
 
   // Silent Push Sync
@@ -239,44 +234,23 @@ function App() {
 
     const initializeAuth = async () => {
 
-      const tokenFromUrl =
-        searchParams.get('token');
-
-      const isNewUser =
-        searchParams.get('new') === 'true';
+      const urlParams = new URLSearchParams(window.location.search);
+      const tokenFromUrl = urlParams.get('token');
+      const isNewUser = urlParams.get('new') === 'true';
 
       if (tokenFromUrl) {
-
-        localStorage.setItem(
-          "jwtoken",
-          tokenFromUrl
-        );
-
+        localStorage.setItem("jwtoken", tokenFromUrl);
       }
 
       if (isNewUser) {
-
         setShowRolePopup(true);
-
       }
 
       if (tokenFromUrl || isNewUser) {
-
-        const newParams =
-          new URLSearchParams(searchParams);
-
-        newParams.delete('token');
-
-        newParams.delete('new');
-
-        setSearchParams(newParams, {
-          replace: true
-        });
-
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
 
-      const activeToken =
-        localStorage.getItem("jwtoken");
+      const activeToken = localStorage.getItem("jwtoken");
 
       if (activeToken) {
 
@@ -344,18 +318,12 @@ function App() {
         } finally {
           setIsAuthLoading(false);
         }
-
       } else {
-
         setIsAuthLoading(false);
-
       }
-
     };
-
     initializeAuth();
-
-  }, [searchParams, setSearchParams]);
+  }, []);
 
   const hideNavbar =
 

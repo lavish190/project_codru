@@ -44,15 +44,13 @@ const getHeightClass = (h: string) => {
 
 const Overview = ({ user, data }: { user: any, data?: any }) => {
   const [isEditMode, setIsEditMode] = useState(false);
-  const [layout, setLayout] = useState<any[]>([]);
   const [isSavingLayout, setIsSavingLayout] = useState(false);
-  const [hasLoadedLayout, setHasLoadedLayout] = useState(false); // 🚨 NEW: Loading Guard
 
   const API_URL = (import.meta.env.VITE_API || "").replace(/\/$/, "");
 
-  // 1. SYNC LAYOUT FROM USER OBJECT
-  useEffect(() => {
-    if (!user) return;
+  // 🚨 SYNCHRONOUS STATE INITIALIZATION: Calculates layout instantly on frame 1
+  const [layout, setLayout] = useState<any[]>(() => {
+    if (!user) return [];
 
     const baseRole = user?.Role?.toLowerCase() || user?.role?.toLowerCase() || "user";
     const userRoles = [baseRole];
@@ -65,24 +63,21 @@ const Overview = ({ user, data }: { user: any, data?: any }) => {
       WIDGET_CONFIG[key].roles.some((r: string) => userRoles.includes(r))
     );
 
-    // 🚨 Critical Fix: Check if DB has data first
     if (user?.dashboardLayout && user.dashboardLayout.length > 0) {
       let syncedLayout = user.dashboardLayout.filter((item: any) => allowedKeys.includes(item.id));
       
-      // Check if new system widgets need to be added
       allowedKeys.forEach(key => {
         if (!syncedLayout.find((item: any) => item.id === key)) {
           syncedLayout.push({ id: key, w: 1, h: 'md' });
         }
       });
-      setLayout(syncedLayout);
+      return syncedLayout;
     } else {
-      // Use defaults if DB is empty
-      setLayout(allowedKeys.map(key => ({ id: key, w: 1, h: 'md' })));
+      return allowedKeys.map(key => ({ id: key, w: 1, h: 'md' }));
     }
-    setHasLoadedLayout(true);
-  }, [user]);
+  });
 
+  
   // 2. PERSISTENT SAVE
   const saveLayoutToDB = async (finalLayout: any[]) => {
     setIsSavingLayout(true);
@@ -136,7 +131,7 @@ const Overview = ({ user, data }: { user: any, data?: any }) => {
   };
 
   // Prevent flicker before data is ready
-  if (!data || !hasLoadedLayout) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-brand-blue" /></div>;
+  if (!data ) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-brand-blue" /></div>;
 
   return (
     <div className="w-full pb-20">
