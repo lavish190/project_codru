@@ -181,11 +181,12 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   });
 
   useEffect(() => {
-    if (editor) {
-      const processed = processInitialValue(value);
-      if (processed !== editor.getHTML() && value !== editor.getHTML()) {
-        editor.commands.setContent(processed);
-      }
+    // 🚨 THE FIX: Stop React if the editor has been destroyed by Suspense/unmounting
+    if (!editor || editor.isDestroyed) return; 
+
+    const processed = processInitialValue(value);
+    if (processed !== editor.getHTML() && value !== editor.getHTML()) {
+      editor.commands.setContent(processed);
     }
   }, [value, editor]);
 
