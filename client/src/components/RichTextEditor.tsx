@@ -181,7 +181,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   });
 
   useEffect(() => {
-    // 🚨 THE FIX: Stop React if the editor has been destroyed by Suspense/unmounting
+    // Stop React if the editor has been destroyed by Suspense/unmounting
     if (!editor || editor.isDestroyed) return; 
 
     const processed = processInitialValue(value);
