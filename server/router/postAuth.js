@@ -465,14 +465,14 @@ router.post("/posts/:postId/comments", authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 7. EDIT A POST
+// 7. EDIT A POST (Now supports split-scheduling)
 // ==========================================
 router.put("/posts/:postId", authenticate, async (req, res) => {
   try {
     const { postId } = req.params;
     
-    // 🚨 THE FIX: Extract all editable fields
-    const { content, status, scheduledFor } = req.body;
+    // Extract all editable fields, including the new distribution object
+    const { content, status, scheduledFor, distribution } = req.body;
     
     const user = await User.findOne({ username: req.username });
     const post = await Post.findById(postId);
@@ -484,12 +484,15 @@ router.put("/posts/:postId", authenticate, async (req, res) => {
       return res.status(403).json({ message: "Unauthorized to edit this post" });
     }
 
-    // 🚨 THE FIX: Update fields dynamically
+    // Update fields dynamically
     if (content !== undefined) post.content = content;
     if (status !== undefined) post.status = status;
-    
-    // Explicitly handle null for scheduledFor if they convert to published
     if (scheduledFor !== undefined) post.scheduledFor = scheduledFor;
+    
+    // 🚨 Save the complex split-scheduling object!
+    if (distribution !== undefined) {
+      post.distribution = distribution;
+    }
 
     await post.save();
     res.status(200).json(post);
