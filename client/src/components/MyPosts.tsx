@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Trash2, Edit3, X, Eye, Clock, FileText, CheckCircle2, ChevronLeft } from "lucide-react";
+import { Loader2, Trash2, Edit3, X, Eye, Clock, FileText, CheckCircle2, ChevronLeft, Globe } from "lucide-react";
 import PostRenderer from "./PostRenderer"; 
 import RichTextEditor from "./RichTextEditor"; 
 import PostCard from "./PostCard"; 
@@ -54,6 +54,7 @@ const MyPosts = ({
   const [editContent, setEditContent] = useState("");
   const [editSchedule, setEditSchedule] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [editPostToLinkedIn, setEditPostToLinkedIn] = useState(false);
 
   useEffect(() => {
     if (currentUserId) {
@@ -133,19 +134,33 @@ const MyPosts = ({
     if (!postToEdit) return;
     try {
       const token = localStorage.getItem("jwtoken");
+
+      // 🚨 Add the distribution logic for the backend
+      const distribution = {
+        cute: {
+          status: editSchedule && new Date(editSchedule) > new Date() ? 'scheduled' : 'posted',
+          scheduledFor: editSchedule ? new Date(editSchedule).toISOString() : null
+        },
+        linkedin: editPostToLinkedIn ? {
+          status: editSchedule && new Date(editSchedule) > new Date() ? 'scheduled' : 'posted',
+          scheduledFor: editSchedule ? new Date(editSchedule).toISOString() : null
+        } : { status: 'unselected' }
+      };
+
       const res = await fetch(`${import.meta.env.VITE_API}posts/${postToEdit._id}`, {
         method: "PUT",
         headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ 
           content: editContent,
           scheduledFor: editSchedule ? new Date(editSchedule).toISOString() : null,
-          status: editSchedule && new Date(editSchedule) > new Date() ? "scheduled" : "published"
+          status: editSchedule && new Date(editSchedule) > new Date() ? "scheduled" : "published",
+          distribution // 🚨 Pass distribution in the payload!
         })
       });
       if (res.ok) {
         const updatedPost = await res.json();
         
-        // 🚨 Optimistic UI + Cache Sync
+        // Optimistic UI + Cache Sync
         const newPosts = posts.map(p => p._id === postToEdit._id ? updatedPost : p);
         setPosts(newPosts);
         if (onPostsUpdate) onPostsUpdate(newPosts);
@@ -219,7 +234,18 @@ const MyPosts = ({
                   <button onClick={(e) => { e.stopPropagation(); setPostToPreview(post); }} className="p-2 bg-white/95 backdrop-blur-md hover:bg-white text-gray-700 hover:text-green-500 rounded-full shadow-md transition transform hover:scale-105 active:scale-95" title="Preview Post">
                     <Eye size={16} />
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); setEditContent(post.content); setEditSchedule(post.scheduledFor ? toLocalDatetimeInput(post.scheduledFor) : ""); setPostToEdit(post); }} className="p-2 bg-white/95 backdrop-blur-md hover:bg-white text-gray-700 hover:text-brand-blue rounded-full shadow-md transition transform hover:scale-105 active:scale-95" title="Edit Post">
+                  <button 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      setEditContent(post.content); 
+                      setEditSchedule(post.scheduledFor ? toLocalDatetimeInput(post.scheduledFor) : ""); 
+                      
+                      setEditPostToLinkedIn(post.distribution?.linkedin?.status && post.distribution?.linkedin?.status !== 'unselected');
+                      setPostToEdit(post); 
+                    }} 
+                    className="p-2 bg-white/95 backdrop-blur-md hover:bg-white text-gray-700 hover:text-brand-blue rounded-full shadow-md transition transform hover:scale-105 active:scale-95" 
+                    title="Edit Post"
+                  >
                     <Edit3 size={16} />
                   </button>
                   <button onClick={(e) => { e.stopPropagation(); setPostToDelete(post._id); }} className="p-2 bg-white/95 backdrop-blur-md hover:bg-white text-gray-700 hover:text-red-500 rounded-full shadow-md transition transform hover:scale-105 active:scale-95" title="Delete Post">
@@ -299,7 +325,22 @@ const MyPosts = ({
           </div>
         </div>
       )}
-
+      {/* 🚨 RESTORED DELETE CONFIRMATION MODAL */}
+      {postToDelete && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToDelete(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center" onClick={e => e.stopPropagation()}>
+            <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Trash2 size={24} />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Post?</h3>
+            <p className="text-gray-500 text-sm mb-6">This action cannot be undone. Are you sure you want to delete this post?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setPostToDelete(null)} className="flex-1 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition">Cancel</button>
+              <button onClick={confirmDelete} className="flex-1 py-3 rounded-xl font-bold text-white bg-red-500 hover:bg-red-600 shadow-md shadow-red-200 transition">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* PREVIEW MODAL */}
       {postToPreview && (
         <div className="fixed inset-0 z-150 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToPreview(null)}>
@@ -334,6 +375,15 @@ const MyPosts = ({
               <div className="border border-brand-orange/50 rounded-xl overflow-hidden min-h-[250px] flex flex-col">
                 <RichTextEditor value={editContent} onChange={(html) => setEditContent(html)} showToolbar={true} className="flex-1" />
               </div>
+              {/* 🚨 ADDED LINKEDIN TOGGLE TO EDIT MODAL */}
+              {postToEdit.status === "scheduled" && (
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-between">
+                  <span className="text-sm font-bold text-[#0A66C2] flex items-center gap-2">
+                    <Globe className="w-4 h-4" /> Cross-post to LinkedIn
+                  </span>
+                  <input type="checkbox" checked={editPostToLinkedIn} onChange={(e) => setEditPostToLinkedIn(e.target.checked)} className="w-4 h-4 accent-[#0A66C2]" />
+                </div>
+              )}
               <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
                 <label className="block text-xs font-bold text-brand-blue uppercase tracking-widest mb-2 flex items-center gap-2"><Clock size={14}/> {postToEdit.status === "scheduled" ? "Reschedule Date" : "Convert to Scheduled Post"}</label>
                 <input type="datetime-local" value={editSchedule} onChange={(e) => setEditSchedule(e.target.value)} min={toLocalDatetimeInput(new Date().toISOString())} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue" />
