@@ -55,6 +55,8 @@ const MyPosts = ({
   const [editSchedule, setEditSchedule] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [editPostToLinkedIn, setEditPostToLinkedIn] = useState(false);
+  const [editSyncTimes, setEditSyncTimes] = useState(true);
+  const [editLinkedinSchedule, setEditLinkedinSchedule] = useState("");
 
   useEffect(() => {
     if (currentUserId) {
@@ -135,15 +137,17 @@ const MyPosts = ({
     try {
       const token = localStorage.getItem("jwtoken");
 
-      // 🚨 Add the distribution logic for the backend
+      // Inside your saveEdit function...
       const distribution = {
         cute: {
           status: editSchedule && new Date(editSchedule) > new Date() ? 'scheduled' : 'posted',
           scheduledFor: editSchedule ? new Date(editSchedule).toISOString() : null
         },
         linkedin: editPostToLinkedIn ? {
-          status: editSchedule && new Date(editSchedule) > new Date() ? 'scheduled' : 'posted',
-          scheduledFor: editSchedule ? new Date(editSchedule).toISOString() : null
+          status: (editSyncTimes ? editSchedule : editLinkedinSchedule) && new Date(editSyncTimes ? editSchedule : editLinkedinSchedule) > new Date() ? 'scheduled' : 'posted',
+          scheduledFor: editSyncTimes 
+            ? (editSchedule ? new Date(editSchedule).toISOString() : null)
+            : (editLinkedinSchedule ? new Date(editLinkedinSchedule).toISOString() : null)
         } : { status: 'unselected' }
       };
 
@@ -154,9 +158,11 @@ const MyPosts = ({
           content: editContent,
           scheduledFor: editSchedule ? new Date(editSchedule).toISOString() : null,
           status: editSchedule && new Date(editSchedule) > new Date() ? "scheduled" : "published",
-          distribution // 🚨 Pass distribution in the payload!
+          distribution // Send the new payload
         })
       });
+
+      
       if (res.ok) {
         const updatedPost = await res.json();
         
@@ -238,9 +244,19 @@ const MyPosts = ({
                     onClick={(e) => { 
                       e.stopPropagation(); 
                       setEditContent(post.content); 
-                      setEditSchedule(post.scheduledFor ? toLocalDatetimeInput(post.scheduledFor) : ""); 
                       
-                      setEditPostToLinkedIn(post.distribution?.linkedin?.status && post.distribution?.linkedin?.status !== 'unselected');
+                      // Extract dates from the backend's distribution object
+                      const cuteTime = post.distribution?.cute?.scheduledFor;
+                      const liTime = post.distribution?.linkedin?.scheduledFor;
+                      const isLiActive = post.distribution?.linkedin?.status && post.distribution?.linkedin?.status !== 'unselected';
+
+                      setEditSchedule(cuteTime ? toLocalDatetimeInput(cuteTime) : "");
+                      setEditLinkedinSchedule(liTime ? toLocalDatetimeInput(liTime) : "");
+                      setEditPostToLinkedIn(!!isLiActive);
+                      
+                      // If times match (or LI wasn't scheduled), toggle sync ON
+                      setEditSyncTimes(!liTime || cuteTime === liTime); 
+                      
                       setPostToEdit(post); 
                     }} 
                     className="p-2 bg-white/95 backdrop-blur-md hover:bg-white text-gray-700 hover:text-brand-blue rounded-full shadow-md transition transform hover:scale-105 active:scale-95" 
@@ -375,18 +391,45 @@ const MyPosts = ({
               <div className="border border-brand-orange/50 rounded-xl overflow-hidden min-h-[250px] flex flex-col">
                 <RichTextEditor value={editContent} onChange={(html) => setEditContent(html)} showToolbar={true} className="flex-1" />
               </div>
-              {/* 🚨 ADDED LINKEDIN TOGGLE TO EDIT MODAL */}
+              {/* LINKEDIN TOGGLE & SYNC SETTINGS */}
               {postToEdit.status === "scheduled" && (
-                <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-between">
-                  <span className="text-sm font-bold text-[#0A66C2] flex items-center gap-2">
-                    <Globe className="w-4 h-4" /> Cross-post to LinkedIn
-                  </span>
-                  <input type="checkbox" checked={editPostToLinkedIn} onChange={(e) => setEditPostToLinkedIn(e.target.checked)} className="w-4 h-4 accent-[#0A66C2]" />
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-4 shrink-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold text-[#0A66C2] flex items-center gap-2">
+                      <Globe className="w-4 h-4" /> Cross-post to LinkedIn
+                    </span>
+                    <input type="checkbox" checked={editPostToLinkedIn} onChange={(e) => setEditPostToLinkedIn(e.target.checked)} className="w-4 h-4 accent-[#0A66C2]" />
+                  </div>
+                  
+                  {editPostToLinkedIn && (
+                    <div className="flex items-center justify-between bg-blue-50/50 p-2 rounded-lg">
+                      <span className="text-xs font-semibold text-gray-600">Same time for all platforms</span>
+                      <input type="checkbox" checked={editSyncTimes} onChange={(e) => setEditSyncTimes(e.target.checked)} className="w-4 h-4 accent-brand-blue" />
+                    </div>
+                  )}
                 </div>
               )}
-              <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                <label className="block text-xs font-bold text-brand-blue uppercase tracking-widest mb-2 flex items-center gap-2"><Clock size={14}/> {postToEdit.status === "scheduled" ? "Reschedule Date" : "Convert to Scheduled Post"}</label>
-                <input type="datetime-local" value={editSchedule} onChange={(e) => setEditSchedule(e.target.value)} min={toLocalDatetimeInput(new Date().toISOString())} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue" />
+              
+              {/* DATE PICKERS */}
+              <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-4 shrink-0">
+                <div>
+                  <label className="block text-xs font-bold text-brand-blue uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <Clock size={14}/> 
+                    {postToEdit.status === "scheduled" 
+                      ? `Reschedule CuTe Feed ${!editSyncTimes && editPostToLinkedIn ? "(Separate)" : ""}` 
+                      : "Convert to Scheduled Post"}
+                  </label>
+                  <input type="datetime-local" value={editSchedule} onChange={(e) => setEditSchedule(e.target.value)} min={toLocalDatetimeInput(new Date().toISOString())} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue" />
+                </div>
+
+                {!editSyncTimes && editPostToLinkedIn && postToEdit.status === "scheduled" && (
+                  <div>
+                     <label className="block text-xs font-bold text-[#0A66C2] uppercase tracking-widest mb-2 flex items-center gap-2">
+                       <Clock size={14}/> Reschedule LinkedIn
+                     </label>
+                     <input type="datetime-local" value={editLinkedinSchedule} onChange={(e) => setEditLinkedinSchedule(e.target.value)} min={toLocalDatetimeInput(new Date().toISOString())} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A66C2]" />
+                  </div>
+                )}
               </div>
             </div>
             <div className="p-4 border-t border-gray-100 bg-slate-50 flex justify-end gap-3 shrink-0">
