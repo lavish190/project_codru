@@ -25,6 +25,78 @@ const CommunicationPortal = () => {
   const [meetDate, setMeetDate] = useState("");
   const [isScheduling, setIsScheduling] = useState(false);
 
+  // ==========================================
+  // DRAG & DROP STATE & HANDLERS
+  // ==========================================
+  const [position, setPosition] = useState({ x: 32, y: 32 }); // Default snap (bottom right, avoiding navbars)
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{ startX: number, startY: number, initialX: number, initialY: number } | null>(null);
+  const bubbleRef = useRef<HTMLButtonElement>(null);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    // Only allow drag if portal is closed
+    if (isOpen) return;
+    
+    e.target.setPointerCapture(e.pointerId);
+    setIsDragging(true);
+    
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: position.x,
+      initialY: position.y
+    };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging || !dragRef.current) return;
+    
+    const deltaX = e.clientX - dragRef.current.startX;
+    const deltaY = e.clientY - dragRef.current.startY;
+    
+    // Reverse math because we use 'right' and 'bottom' for positioning
+    setPosition({
+      x: dragRef.current.initialX - deltaX,
+      y: dragRef.current.initialY - deltaY
+    });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!isDragging || !dragRef.current) return;
+    
+    setIsDragging(false);
+    e.target.releasePointerCapture(e.pointerId);
+
+    // Snap to nearest corner logic
+    if (bubbleRef.current) {
+      const rect = bubbleRef.current.getBoundingClientRect();
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      // 32px padding from the edge (clears scrollbars and fits nicely)
+      // 96px padding from bottom if on mobile so it doesn't hit the bottom nav
+      const isMobile = window.innerWidth < 768;
+      const bottomPadding = isMobile ? 96 : 32;
+
+      const snapX = centerX > screenWidth / 2 ? 32 : screenWidth - rect.width - 32; 
+      const snapY = centerY > screenHeight / 2 ? bottomPadding : screenHeight - rect.height - 32;
+
+      setPosition({ x: snapX, y: snapY });
+    }
+    
+    // If they barely moved it, treat it as a click and open the portal
+    const moveThreshold = 5;
+    if (
+      Math.abs(e.clientX - dragRef.current.startX) < moveThreshold &&
+      Math.abs(e.clientY - dragRef.current.startY) < moveThreshold
+    ) {
+      setIsOpen(true);
+    }
+  };
+
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(() => { scrollToBottom(); }, [chatHistory]);
 
@@ -201,15 +273,34 @@ const CommunicationPortal = () => {
 
   return (
     <>
-      {/* 🚨 MOBILE RESPONSIVE TRIGGER BUTTON (z-[1050] to beat navbar, bottom-24 to float above it) */}
-      <button onClick={() => setIsOpen(true)} className={`fixed bottom-24 md:bottom-8 right-4 md:right-8 z-[1050] bg-gradient-to-br from-brand-blue to-blue-600 text-white p-4 rounded-full shadow-xl shadow-blue-500/30 hover:scale-110 transition-all duration-300 ${isOpen ? 'opacity-0 pointer-events-none scale-50' : 'opacity-100 scale-100'}`}>
-        <div className="relative">
-          <MessageSquare size={24} className="text-white drop-shadow-sm" />
-          <span className="absolute -top-2 -right-2 bg-brand-orange text-white text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-brand-blue shadow-sm">{circle.length}</span>
-        </div>
-      </button>
+      {/* 🚨 THE DRAGGABLE BUBBLE */}
+      {!isOpen && (
+        <button 
+          ref={bubbleRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          style={{
+            position: 'fixed',
+            right: `${position.x}px`,
+            bottom: `${position.y}px`,
+            touchAction: 'none', 
+            transition: isDragging ? 'none' : 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+            zIndex: 1050 
+          }}
+          className="bg-gradient-to-br from-brand-blue to-blue-600 text-white p-4 rounded-full shadow-xl shadow-blue-500/30 active:scale-95 hover:scale-105 cursor-grab active:cursor-grabbing"
+        >
+          <div className="relative pointer-events-none">
+            <MessageSquare size={24} className="text-white drop-shadow-sm" />
+            <span className="absolute -top-2 -right-2 bg-brand-orange text-white text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-brand-blue shadow-sm">
+              {circle.length}
+            </span>
+          </div>
+        </button>
+      )}
 
-      {/* 🚨 MOBILE RESPONSIVE PORTAL OVERLAY (left-4 right-4 for centering, z-[1050]) */}
+      {/* 🚨 MOBILE RESPONSIVE PORTAL OVERLAY */}
       <div className={`fixed bottom-[5.5rem] md:bottom-24 right-4 left-4 md:left-auto md:right-8 z-[1050] w-auto md:w-96 bg-white rounded-4xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col transition-all duration-500 origin-bottom md:origin-bottom-right ${isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-50 pointer-events-none translate-y-10'}`} style={{ height: '600px', maxHeight: 'calc(100dvh - 7rem)' }}>
         
         {/* DYNAMIC HEADER */}

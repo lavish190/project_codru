@@ -5,10 +5,10 @@ const Booking = require("../models/bookingSchema");
 const User = require("../models/userSchema");
 const sendAutoNotification = require('./notify');
 const Post = require('../models/postSchema');
-const SocialConnection = require('../models/SocialConnection');
-const { formatHtmlForLinkedIn } = require('./formatters');
-const { uploadImageToLinkedIn } = require('./linkedinHelper');
 const Blog = require('../models/blogSchema');
+
+// 🚨 IMPORT YOUR NEW MODULAR PUBLISHERS HERE
+const { publishToLinkedIn } = require('./publishers');
 
 // ==========================================
 // HELPER: MARK AS NO-SHOW
@@ -36,10 +36,8 @@ const checkAttendanceAndUnlockStep2 = async (app) => {
 
     const pendingCalls = await Booking.find({
       status: "scheduled",
-      date: { $lte: bufferTime, $gte: twoDaysAgo } // Swapped oneHourAgo for bufferTime
+      date: { $lte: bufferTime, $gte: twoDaysAgo } 
     }).populate("parent").populate("counselor");
-
-    
 
     if (pendingCalls.length === 0) return;
 
@@ -176,78 +174,42 @@ const startAllCronJobs = (app) => {
       const duePosts = await Post.find({
         $or: [
           { status: "scheduled", scheduledFor: { $lte: now } },
-          { "distribution.linkedin.status": "scheduled", "distribution.linkedin.scheduledFor": { $lte: now } }
+          { "distribution.linkedin.status": "scheduled", "distribution.linkedin.scheduledFor": { $lte: now } },
+          { "distribution.facebook.status": "scheduled", "distribution.facebook.scheduledFor": { $lte: now } }
         ]
       });
 
       for (const post of duePosts) {
         let modified = false;
+        const apiTasks = []; // Holds all external API calls for this post
 
         // --- A. HANDLE LINKEDIN PUBLISHING ---
         if (post.distribution?.linkedin?.status === "scheduled" && new Date(post.distribution.linkedin.scheduledFor) <= now) {
-          
-          const connection = await SocialConnection.findOne({ userId: post.userId, provider: 'linkedin' });
-          
-          if (connection && connection.accessToken) {
-            const plainTextContent = formatHtmlForLinkedIn(post.content || '');
-            
-            // 🚨 UPDATED PAYLOAD GENERATOR
-            let specificContent = {
-              "com.linkedin.ugc.ShareContent": {
-                shareCommentary: { text: plainTextContent },
-                shareMediaCategory: "NONE"
-              }
-            };
-
-            try {
-              // 🚨 NEW IMAGE PROCESSING LOGIC
-              if (post.images && post.images.length > 0) {
-                console.log(`Processing ${post.images.length} scheduled images for LinkedIn...`);
-                const uploadPromises = post.images.map(url => uploadImageToLinkedIn(url, connection.accessToken, connection.providerAccountId));
-                const assetUrns = await Promise.all(uploadPromises);
-
-                specificContent["com.linkedin.ugc.ShareContent"].shareMediaCategory = "IMAGE";
-                specificContent["com.linkedin.ugc.ShareContent"].media = assetUrns.map(urn => ({
-                  status: "READY",
-                  media: urn
-                }));
-              }
-
-              // 🚨 EXISTING POST LOGIC
-              const linkedInRes = await fetch('https://api.linkedin.com/v2/ugcPosts', {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${connection.accessToken}`,
-                  'Content-Type': 'application/json',
-                  'X-Restli-Protocol-Version': '2.0.0'
-                },
-                body: JSON.stringify({
-                  author: connection.providerAccountId,
-                  lifecycleState: 'PUBLISHED',
-                  specificContent: specificContent,
-                  visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
-                })
-              });
-
-              if (linkedInRes.ok) {
-                post.distribution.linkedin.status = "posted";
-              } else {
-                const errData = await linkedInRes.json();
+          apiTasks.push(
+            publishToLinkedIn(post)
+              .then(() => { post.distribution.linkedin.status = "posted"; })
+              .catch((err) => {
                 post.distribution.linkedin.status = "failed";
-                post.distribution.linkedin.errorLog = errData.message;
-              }
-            } catch (err) {
-              post.distribution.linkedin.status = "failed";
-              post.distribution.linkedin.errorLog = err.message;
-            }
-          } else {
-            post.distribution.linkedin.status = "failed";
-            post.distribution.linkedin.errorLog = "LinkedIn token not found or expired.";
-          }
+                post.distribution.linkedin.errorLog = err.message;
+              })
+          );
           modified = true;
         }
 
-        // --- B. HANDLE CUTE FEED PUBLISHING (Unchanged) ---
+        // --- B. HANDLE FACEBOOK PUBLISHING ---
+        if (post.distribution?.facebook?.status === "scheduled" && new Date(post.distribution.facebook.scheduledFor) <= now) {
+          apiTasks.push(
+            publishToFacebook(post)
+              .then(() => { post.distribution.facebook.status = "posted"; })
+              .catch((err) => {
+                post.distribution.facebook.status = "failed";
+                post.distribution.facebook.errorLog = err.message;
+              })
+          );
+          modified = true;
+        }
+
+        // --- C. HANDLE CUTE FEED PUBLISHING ---
         if (post.status === "scheduled" && post.scheduledFor && new Date(post.scheduledFor) <= now) {
           post.status = "published";
           if (post.distribution?.cute) post.distribution.cute.status = "posted";
@@ -260,13 +222,18 @@ const startAllCronJobs = (app) => {
           }
         }
 
+        // Wait for all external APIs to process for this post concurrently
+        if (apiTasks.length > 0) {
+          await Promise.allSettled(apiTasks);
+        }
+
         if (modified) {
           await post.save();
           console.log(`✅ Processed auto-publishing for scheduled post: ${post._id}`);
         }
       }
 
-      // --- C. HANDLE BLOG PUBLISHING ---
+      // --- D. HANDLE BLOG PUBLISHING ---
       const dueBlogs = await Blog.find({ 
         status: "scheduled", 
         scheduledFor: { $lte: now } 

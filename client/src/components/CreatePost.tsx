@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+// 🚨 ADDED "Facebook" to lucide-react imports
 import { Image as ImageIcon, X, Loader2, Send, Clock, Maximize2, Minimize2, CheckCircle2, Trash2, Globe, ChevronLeft, ChevronRight, MoveLeft, MoveRight, Plus} from "lucide-react";
 import Muialert from "./Muialert";
 import { UserData } from "../App";
@@ -14,23 +15,24 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const DRAFT_KEY = `cute_post_draft_${userData._id}`;
   const SCHEDULE_DRAFT_KEY = `cute_post_schedule_draft_${userData._id}`;
   const LINKEDIN_DRAFT_KEY = `cute_post_linkedin_draft_${userData._id}`;
+  // 🚨 ADDED FACEBOOK DRAFT KEY
+  const FACEBOOK_DRAFT_KEY = `cute_post_facebook_draft_${userData._id}`;
 
   const [content, setContent] = useState(() => localStorage.getItem(DRAFT_KEY) || "");
   const [isContentEmpty, setIsContentEmpty] = useState(!content);
   
-  // Replace imageFiles and imagePreviews with this single state:
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   
-  // --- NEW SCHEDULING STATE INIT ---
+  // 🚨 ADDED FACEBOOK TO TIMES OBJECT
   const savedScheduleRaw = localStorage.getItem(SCHEDULE_DRAFT_KEY);
-  let initialScheduleConfig = { isScheduled: false, syncTimes: true, times: { cute: "", linkedin: "" } };
+  let initialScheduleConfig = { isScheduled: false, syncTimes: true, times: { cute: "", linkedin: "", facebook: "" } };
 
   if (savedScheduleRaw) {
     try {
       initialScheduleConfig = JSON.parse(savedScheduleRaw);
     } catch (e) {
-      initialScheduleConfig = { isScheduled: true, syncTimes: true, times: { cute: savedScheduleRaw, linkedin: savedScheduleRaw } };
+      initialScheduleConfig = { isScheduled: true, syncTimes: true, times: { cute: savedScheduleRaw, linkedin: savedScheduleRaw, facebook: savedScheduleRaw } };
     }
   }
 
@@ -40,6 +42,10 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
   const [isLinkedInConnected, setIsLinkedInConnected] = useState(false);
   const [postToLinkedIn, setPostToLinkedIn] = useState(false);
+  
+  // 🚨 ADDED FACEBOOK CONNECTION STATE
+  const [isFacebookConnected, setIsFacebookConnected] = useState(false);
+  const [postToFacebook, setPostToFacebook] = useState(false);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasDraft, setHasDraft] = useState(!!content || scheduleConfig.isScheduled);
@@ -47,7 +53,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const [isUploading, setIsUploading] = useState(false);
   const [alert, setAlert] = useState({ show: false, message: "", type: "success" as "success" | "error" });
 
-  // NEW: Tracks which image is open in the full-screen viewer (null means closed)
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,12 +62,13 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     const checkConnections = async () => {
       try {
         const token = localStorage.getItem("jwtoken");
-        // We will build this quick check route on the backend next
         const res = await fetch(`${import.meta.env.VITE_API}auth/connections`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
         const data = await res.json();
         setIsLinkedInConnected(data.linkedin); 
+        // 🚨 LOAD FACEBOOK CONNECTION STATUS
+        setIsFacebookConnected(data.facebook); 
       } catch (err) {
         console.error("Failed to fetch social connections");
       }
@@ -70,7 +76,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     checkConnections();
   }, []);
 
-  // --- LOAD DRAFTS ONCE USER DATA IS READY ---
   useEffect(() => {
     if (userData?._id) {
       const draftKey = `cute_post_draft_${userData._id}`;
@@ -90,7 +95,7 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           setScheduleConfig(parsed);
           setHasDraft(true);
         } catch (e) {
-          setScheduleConfig({ isScheduled: true, syncTimes: true, times: { cute: savedScheduleRaw, linkedin: savedScheduleRaw } });
+          setScheduleConfig({ isScheduled: true, syncTimes: true, times: { cute: savedScheduleRaw, linkedin: savedScheduleRaw, facebook: savedScheduleRaw } });
           setHasDraft(true);
         }
       }
@@ -110,30 +115,42 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       if (savedLinkedIn === "true") {
         setPostToLinkedIn(true);
       }
+      
+      // 🚨 LOAD FACEBOOK DRAFT PREFERENCE
+      const savedFacebook = localStorage.getItem(`cute_post_facebook_draft_${userData._id}`);
+      if (savedFacebook === "true") {
+        setPostToFacebook(true);
+      }
     }
-  }, [userData?._id]); // Only runs when the user ID successfully loads
+  }, [userData?._id]); 
 
-  // --- HANDLERS ---
   const handleContentChange = (html: string, isEmpty: boolean) => {
     setContent(html);
     setIsContentEmpty(isEmpty);
     if (isEmpty) {
       localStorage.removeItem(DRAFT_KEY);
-      // Check local storage directly instead of relying on state here
       setHasDraft(!!localStorage.getItem(SCHEDULE_DRAFT_KEY)); 
     } else {
       localStorage.setItem(DRAFT_KEY, html);
       setHasDraft(true);
     }
   };
+
   const LinkedinIcon = ({ className }: { className?: string }) => (
     <svg className={className} fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
       <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
     </svg>
   );
+
+  const FacebookIcon = ({ className }: { className?: string }) => (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-3 7h-1.924c-.615 0-1.076.252-1.076.889v1.111h3l-.239 3h-2.761v8h-3v-8h-2v-3h2v-1.923c0-2.022 1.064-3.077 3.461-3.077h2.539v3z"/>
+    </svg>
+  );
+
   const updateScheduleConfig = (newConfig: typeof scheduleConfig) => {
     setScheduleConfig(newConfig);
-    if (newConfig.isScheduled && (newConfig.times.cute || newConfig.times.linkedin)) {
+    if (newConfig.isScheduled && (newConfig.times.cute || newConfig.times.linkedin || newConfig.times.facebook)) {
       localStorage.setItem(SCHEDULE_DRAFT_KEY, JSON.stringify(newConfig));
       setHasDraft(true);
     } else {
@@ -143,31 +160,51 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   };
 
   const handleLinkedInToggle = async () => {
-  if (isLinkedInConnected) {
-    // 🚨 UPDATE THIS BLOCK
-    const newState = !postToLinkedIn;
-    setPostToLinkedIn(newState);
-    if (newState) {
-      localStorage.setItem(LINKEDIN_DRAFT_KEY, "true");
-    } else {
-      localStorage.removeItem(LINKEDIN_DRAFT_KEY);
-    }
-  } else {
-    // If not connected, trigger the OAuth flow we built!
-    try {
-      const token = localStorage.getItem("jwtoken");
-      const res = await fetch(`${import.meta.env.VITE_API}auth/linkedin/connect`, {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url; // Redirects to LinkedIn login
+    if (isLinkedInConnected) {
+      const newState = !postToLinkedIn;
+      setPostToLinkedIn(newState);
+      if (newState) {
+        localStorage.setItem(LINKEDIN_DRAFT_KEY, "true");
+      } else {
+        localStorage.removeItem(LINKEDIN_DRAFT_KEY);
       }
-    } catch (err) {
-      setAlert({ show: true, message: "Failed to connect to LinkedIn", type: "error" });
+    } else {
+      try {
+        const token = localStorage.getItem("jwtoken");
+        const res = await fetch(`${import.meta.env.VITE_API}auth/linkedin/connect`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.url) window.location.href = data.url; 
+      } catch (err) {
+        setAlert({ show: true, message: "Failed to connect to LinkedIn", type: "error" });
+      }
     }
-  }
-};
+  };
+
+  // 🚨 ADDED FACEBOOK TOGGLE HANDLER (Identical to LinkedIn)
+  const handleFacebookToggle = async () => {
+    if (isFacebookConnected) {
+      const newState = !postToFacebook;
+      setPostToFacebook(newState);
+      if (newState) {
+        localStorage.setItem(FACEBOOK_DRAFT_KEY, "true");
+      } else {
+        localStorage.removeItem(FACEBOOK_DRAFT_KEY);
+      }
+    } else {
+      try {
+        const token = localStorage.getItem("jwtoken");
+        const res = await fetch(`${import.meta.env.VITE_API}auth/facebook/connect`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.url) window.location.href = data.url; 
+      } catch (err) {
+        setAlert({ show: true, message: "Failed to connect to Facebook", type: "error" });
+      }
+    }
+  };
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -193,7 +230,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       
       setImageUrls((prev) => {
         const updated = [...prev, ...newUrls];
-        // Save the simple, lightweight URLs to localStorage
         localStorage.setItem(`cute_post_images_draft_${userData?._id}`, JSON.stringify(updated));
         setHasDraft(true);
         return updated;
@@ -223,18 +259,15 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   };
 
   const removeImage = (indexToRemove: number) => {
-    // 1. Purge from Cloudinary
     const urlToDelete = imageUrls[indexToRemove];
     deleteImagesFromCloudinary([urlToDelete]); 
 
-    // 2. Remove from frontend state and local storage
     setImageUrls((prev) => {
       const updated = prev.filter((_, index) => index !== indexToRemove);
       if (updated.length > 0) {
         localStorage.setItem(`cute_post_images_draft_${userData?._id}`, JSON.stringify(updated));
       } else {
         localStorage.removeItem(`cute_post_images_draft_${userData?._id}`);
-        // Only clear the "Saved" badge if there's also no text
         if (isContentEmpty) setHasDraft(false);
       }
       return updated;
@@ -242,24 +275,24 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   };
 
   const clearDraft = () => {
-    // 1. Purge ALL active images from Cloudinary
     deleteImagesFromCloudinary(imageUrls); 
 
-    // 2. Clear all your original storage keys (Kept your exact constants!)
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SCHEDULE_DRAFT_KEY);
     localStorage.removeItem(LINKEDIN_DRAFT_KEY); 
-    localStorage.removeItem(`cute_post_images_draft_${userData?._id}`); // New key for images
+    // 🚨 ADDED FACEBOOK CLEAR
+    localStorage.removeItem(FACEBOOK_DRAFT_KEY); 
+    localStorage.removeItem(`cute_post_images_draft_${userData?._id}`); 
     
-    // 3. Reset all your original states
     setContent("");
     setIsContentEmpty(true);
-    setScheduleConfig({ isScheduled: false, syncTimes: true, times: { cute: "", linkedin: "" } });
+    setScheduleConfig({ isScheduled: false, syncTimes: true, times: { cute: "", linkedin: "", facebook: "" } });
     setShowScheduleModal(false);
     setPostToLinkedIn(false);
+    // 🚨 RESET FACEBOOK TOGGLE
+    setPostToFacebook(false);
     setHasDraft(false);
     
-    // 4. Reset the new unified image array
     setImageUrls([]);
   };
 
@@ -273,9 +306,8 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     setViewerIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
   };
 
-  // Swaps the image position and keeps the viewer focused on it
   const moveImage = (e: React.MouseEvent, index: number, direction: "left" | "right") => {
-    e.stopPropagation(); // 🚨 This stops the viewer from closing!
+    e.stopPropagation(); 
     
     const newIndex = direction === "left" ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= imageUrls.length) return;
@@ -290,9 +322,8 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     setViewerIndex(newIndex);
   };
 
-  // Safely deletes from the viewer and shifts the focus
   const removeImageFromViewer = (e: React.MouseEvent) => {
-    e.stopPropagation(); // 🚨 Stop this from closing too!
+    e.stopPropagation(); 
     if (viewerIndex === null) return;
     removeImage(viewerIndex);
     if (imageUrls.length <= 1) {
@@ -305,7 +336,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    // 1. Validation check uses imageFiles.length
     if (isContentEmpty && imageUrls.length === 0) {
       return setAlert({ show: true, message: "Please add some text or an image!", type: "error" });
     }
@@ -315,17 +345,15 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       if (scheduleConfig.syncTimes && new Date(scheduleConfig.times.cute) <= now) {
         return setAlert({ show: true, message: "Scheduled time must be in the future.", type: "error" });
       }
-      if (!scheduleConfig.syncTimes && ((scheduleConfig.times.cute && new Date(scheduleConfig.times.cute) <= now) || (postToLinkedIn && scheduleConfig.times.linkedin && new Date(scheduleConfig.times.linkedin) <= now))) {
+      if (!scheduleConfig.syncTimes && ((scheduleConfig.times.cute && new Date(scheduleConfig.times.cute) <= now) || (postToLinkedIn && scheduleConfig.times.linkedin && new Date(scheduleConfig.times.linkedin) <= now) || (postToFacebook && scheduleConfig.times.facebook && new Date(scheduleConfig.times.facebook) <= now))) {
         return setAlert({ show: true, message: "Scheduled times must be in the future.", type: "error" });
       }
     }
 
     setIsUploading(true);
-    let finalImageUrls: string[] = []; // Array instead of string
+    let finalImageUrls: string[] = imageUrls;
 
     try {
-      
-
       const token = localStorage.getItem("jwtoken");
       if (!token) return navigate("/signin");
 
@@ -337,6 +365,11 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
         linkedin: postToLinkedIn ? {
           status: scheduleConfig.isScheduled ? 'scheduled' : 'posted',
           scheduledFor: scheduleConfig.isScheduled ? new Date(scheduleConfig.syncTimes ? scheduleConfig.times.cute : scheduleConfig.times.linkedin).toISOString() : null
+        } : { status: 'unselected' },
+        // 🚨 ADDED FACEBOOK TO PAYLOAD
+        facebook: postToFacebook ? {
+          status: scheduleConfig.isScheduled ? 'scheduled' : 'posted',
+          scheduledFor: scheduleConfig.isScheduled ? new Date(scheduleConfig.syncTimes ? scheduleConfig.times.cute : scheduleConfig.times.facebook).toISOString() : null
         } : { status: 'unselected' }
       };
 
@@ -345,7 +378,7 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({
           content,
-          images: finalImageUrls, // 3. Send the array matching our new backend schema!
+          images: finalImageUrls, 
           distribution 
         }),
       });
@@ -366,7 +399,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
   const isReadyToSubmit = !isUploading && (!isContentEmpty || imageUrls.length > 0) && (!scheduleConfig.isScheduled || (scheduleConfig.isScheduled && !!scheduleConfig.times.cute));
 
-  // --- SUB-COMPONENTS ---
   const renderScheduleModal = () => {
     if (!showScheduleModal) return null;
     const minTime = new Date().toISOString().slice(0, 16);
@@ -385,7 +417,8 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
         {scheduleConfig.isScheduled && (
           <div className="space-y-4">
-            {postToLinkedIn && (
+            {/* 🚨 Check for BOTH social platforms for the Sync Times option */}
+            {(postToLinkedIn || postToFacebook) && (
                <div className="flex items-center justify-between bg-blue-50/50 p-2 rounded-lg">
                  <span className="text-xs font-semibold text-gray-600">Same time for all platforms</span>
                  <input type="checkbox" checked={scheduleConfig.syncTimes} onChange={(e) => updateScheduleConfig({ ...scheduleConfig, syncTimes: e.target.checked })} className="w-4 h-4 accent-brand-blue" />
@@ -394,7 +427,7 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-gray-500 flex items-center gap-1">
-                CuTe Feed {!scheduleConfig.syncTimes && postToLinkedIn && "(Separate)"}
+                CuTe Feed {!scheduleConfig.syncTimes && (postToLinkedIn || postToFacebook) && "(Separate)"}
               </label>
               <input type="datetime-local" min={minTime} value={scheduleConfig.times.cute} onChange={(e) => updateScheduleConfig({ ...scheduleConfig, times: { ...scheduleConfig.times, cute: e.target.value } })} className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand-orange outline-none" />
             </div>
@@ -403,6 +436,14 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
               <div className="space-y-1">
                 <label className="text-xs font-bold text-[#0A66C2] flex items-center gap-1"><LinkedinIcon className="w-5 h-5"/> LinkedIn</label>
                 <input type="datetime-local" min={minTime} value={scheduleConfig.times.linkedin} onChange={(e) => updateScheduleConfig({ ...scheduleConfig, times: { ...scheduleConfig.times, linkedin: e.target.value } })} className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-[#0A66C2] outline-none" />
+              </div>
+            )}
+            
+            {/* 🚨 ADDED FACEBOOK SCHEDULING INPUT */}
+            {!scheduleConfig.syncTimes && postToFacebook && (
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-blue-600 flex items-center gap-1"><FacebookIcon className="w-4 h-4"/> Facebook</label>
+                <input type="datetime-local" min={minTime} value={scheduleConfig.times.facebook} onChange={(e) => updateScheduleConfig({ ...scheduleConfig, times: { ...scheduleConfig.times, facebook: e.target.value } })} className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-600 outline-none" />
               </div>
             )}
           </div>
@@ -414,7 +455,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const renderActionToolbar = (layout: "compact" | "expanded") => (
   <div className={`flex items-center justify-between ${layout === "compact" ? "mt-4 ml-0 sm:ml-16" : "mt-6"} relative`}>
     
-    {/* LEFT SIDE: Attachments & Socials */}
     <div className="flex items-center gap-1 sm:gap-2">
       <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 text-brand-blue hover:text-brand-orange hover:bg-orange-50 px-2 sm:px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 text-sm" disabled={isUploading}>
         <ImageIcon className="w-4 h-4" />
@@ -422,7 +462,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       </button>
       <input type="file" accept="image/*" multiple ref={fileInputRef} className="hidden" onChange={handleImageSelect} />
 
-      {/* Upward Hover/Click Socials Menu */}
       <div 
         className="relative flex items-center justify-center"
         onMouseEnter={() => setIsSocialMenuOpen(true)}
@@ -431,9 +470,12 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
         <button 
           type="button" 
           onClick={() => setIsSocialMenuOpen((prev) => !prev)}
-          className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors ${postToLinkedIn ? 'bg-blue-50 text-[#0A66C2]' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
+          className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors ${
+            postToLinkedIn || postToFacebook ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+          }`}
         >
-          {postToLinkedIn ? <LinkedinIcon className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
+          {/* 🚨 DYNAMIC MAIN ICON */}
+          {(postToLinkedIn && postToFacebook) ? <Globe className="w-4 h-4" /> : postToLinkedIn ? <LinkedinIcon className="w-4 h-4" /> : postToFacebook ? <FacebookIcon className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
         </button>
         
         <div className="absolute bottom-full w-full h-3"></div>
@@ -450,14 +492,25 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           >
             <LinkedinIcon className="w-4 h-4" />
           </button>
+          
+          {/* 🚨 ADDED FACEBOOK BUTTON TO MENU */}
+          <button 
+            type="button" 
+            onClick={() => {
+              handleFacebookToggle();
+              setIsSocialMenuOpen(false);
+            }}
+            className={`p-2 rounded-full transition-colors flex items-center justify-center ${postToFacebook ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
+            title={isFacebookConnected ? (postToFacebook ? "Disable Facebook" : "Enable Facebook") : "Connect Facebook"}
+          >
+            <FacebookIcon className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>
 
-    {/* RIGHT SIDE: Post Actions */}
     <div className="flex items-center gap-3 sm:gap-4 relative justify-end">
       
-      {/* DESKTOP ONLY: Text-based Clear Draft */}
       {hasDraft && (
         <button type="button" onClick={clearDraft} className="hidden sm:block text-xs font-bold text-gray-400 hover:text-red-500 transition-colors whitespace-nowrap">
           Clear Draft
@@ -466,7 +519,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
       {renderScheduleModal()}
 
-      {/* Ultra-Tight Apple Style Split Pill */}
       <div className={`shrink-0 flex items-stretch bg-brand-orange rounded-full transition-all divide-x divide-white/20 overflow-hidden ${!isReadyToSubmit ? 'opacity-50 grayscale-[15%]' : 'shadow-sm hover:shadow-md hover:-translate-y-0.5'}`}>
         <button 
           type="button" 
@@ -498,7 +550,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       {/* COMPACT MODE */}
       <div className={`max-w-2xl mx-auto bg-white rounded-3xl shadow-xl border border-gray-100 p-4 sm:p-6 relative ${isExpanded ? 'hidden' : 'block'}`}>
         
-        {/* Top Right Badges (No longer overlapping!) */}
         <div className="absolute top-5 right-5 sm:top-6 sm:right-6 flex items-center gap-2 z-10">
           {hasDraft && (
             <span className="flex items-center gap-1 text-[10px] sm:text-xs font-bold text-green-500 bg-green-50 px-2 py-1 rounded-full animate-in fade-in">
@@ -510,7 +561,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           </button>
         </div>
         
-        {/* The pr-[90px] padding forces title wrapping on mobile, protecting the top-right icons */}
         <h2 className="text-xl sm:text-2xl font-display font-bold text-brand-blue mb-4 sm:mb-6 pr-[90px] sm:pr-0">Create a CuTe Post</h2>
         
         <div className="flex gap-3 sm:gap-4">
@@ -521,7 +571,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           <div className="relative w-full bg-slate-50 border border-gray-200 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-brand-orange/50 focus-within:border-brand-orange transition-all h-28 sm:h-32 flex">
             <RichTextEditor value={content} onChange={handleContentChange} showToolbar={false} />
             
-            {/* MOBILE ONLY: Contextual Floating Trash Icon inside the editor */}
             {hasDraft && (
               <button 
                 type="button" 
@@ -539,7 +588,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           <div 
             className="flex gap-3 overflow-x-auto py-2 ml-0 sm:ml-16 mt-3 snap-x hide-scrollbar"
             onWheel={(e) => {
-              // Magically converts vertical mouse wheel into horizontal scrolling!
               if (e.deltaY !== 0) {
                 e.currentTarget.scrollLeft += e.deltaY;
               }
@@ -547,7 +595,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           >
             {imageUrls.map((preview, index) => (
               <div key={index} className="relative shrink-0 snap-center rounded-2xl overflow-hidden shadow-sm border border-gray-100 bg-slate-50 w-40 h-40 sm:w-48 sm:h-48 group">
-                {/* Inside your imagePreviews.map block, update the <img> tag to this: */}
                 <img 
                   src={preview} 
                   alt={`Preview ${index + 1}`} 
@@ -605,7 +652,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
               <div 
                 className="flex gap-3 overflow-x-auto py-2 ml-0 sm:ml-16 mt-3 snap-x hide-scrollbar"
                 onWheel={(e) => {
-                  // Magically converts vertical mouse wheel into horizontal scrolling!
                   if (e.deltaY !== 0) {
                     e.currentTarget.scrollLeft += e.deltaY;
                   }
@@ -613,7 +659,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
               >
                 {imageUrls.map((preview, index) => (
                   <div key={index} className="relative shrink-0 snap-center rounded-2xl overflow-hidden shadow-sm border border-gray-100 bg-slate-50 w-40 h-40 sm:w-48 sm:h-48 group">
-                    {/* Inside your imageUrls.map block, update the <img> tag to this: */}
                     <img 
                       src={preview} 
                       alt={`Preview ${index + 1}`} 
@@ -652,10 +697,8 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       {viewerIndex !== null && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-200" onClick={() => setViewerIndex(null)}>
           
-          {/* Top Bar: Controls & Close Button */}
           <div className="absolute top-0 left-0 right-0 p-4 sm:p-6 flex justify-between items-center z-20 bg-gradient-to-b from-black/80 to-transparent">
             
-            {/* Left Side: Counter & Sorting/Adding Controls */}
             <div className="flex items-center gap-4 sm:gap-6">
               <span className="text-white/90 font-medium text-sm sm:text-base tracking-widest bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md">
                 {viewerIndex + 1} / {imageUrls.length}
@@ -677,7 +720,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
               )}
             </div>
 
-            {/* Right Side: Delete & Close */}
             <div className="flex items-center gap-2 sm:gap-4">
               <button onClick={(e) => removeImageFromViewer(e)} className="text-white/80 hover:text-red-500 transition-colors p-2 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-md" title="Delete Photo">
                 <Trash2 className="w-5 h-5 sm:w-5 sm:h-5" />
@@ -688,7 +730,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
             </div>
           </div>
 
-          {/* Previous Button */}
           {viewerIndex > 0 && (
             <button 
               onClick={prevViewerImage}
@@ -698,7 +739,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
             </button>
           )}
 
-          {/* Main Focused Image */}
           <div className="relative w-full max-w-6xl px-16 sm:px-28 flex justify-center items-center h-full" onClick={(e) => e.stopPropagation()}>
             <img 
               src={imageUrls[viewerIndex]} 
@@ -707,7 +747,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
             />
           </div>
 
-          {/* Next Button */}
           {viewerIndex < imageUrls.length - 1 && (
             <button 
               onClick={nextViewerImage}
@@ -717,7 +756,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
             </button>
           )}
 
-          {/* Bottom Desktop Thumbnail Strip (The "Left and Right" preview) */}
           {imageUrls.length > 1 && (
             <div className="absolute bottom-6 sm:bottom-8 left-0 right-0 flex justify-center gap-2 sm:gap-3 px-4 z-10" onClick={(e) => e.stopPropagation()}>
               {imageUrls.map((thumb, idx) => (

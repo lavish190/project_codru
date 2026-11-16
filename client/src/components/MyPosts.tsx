@@ -90,7 +90,7 @@ const MyPosts = ({
       };
       fetchDashboardPosts();
     }
-  }, [currentUserId]); // Removed preloadedPosts from array to prevent re-fetch loops
+  }, [currentUserId]); 
 
   const publishedPosts = posts.filter(p => p.status !== "scheduled");
   const scheduledPosts = posts.filter(p => p.status === "scheduled");
@@ -137,7 +137,6 @@ const MyPosts = ({
     try {
       const token = localStorage.getItem("jwtoken");
 
-      // Inside your saveEdit function...
       const distribution = {
         cute: {
           status: editSchedule && new Date(editSchedule) > new Date() ? 'scheduled' : 'posted',
@@ -225,7 +224,6 @@ const MyPosts = ({
             <div 
               key={post._id} 
               onClick={() => {
-                // ONLY trigger feed view if we are on the Public Profile!
                 if (isPublicProfile) {
                   setStartPostId(post._id);
                   setViewMode("feed");
@@ -245,7 +243,6 @@ const MyPosts = ({
                       e.stopPropagation(); 
                       setEditContent(post.content); 
                       
-                      // Extract dates from the backend's distribution object
                       const cuteTime = post.distribution?.cute?.scheduledFor;
                       const liTime = post.distribution?.linkedin?.scheduledFor;
                       const isLiActive = post.distribution?.linkedin?.status && post.distribution?.linkedin?.status !== 'unselected';
@@ -253,8 +250,6 @@ const MyPosts = ({
                       setEditSchedule(cuteTime ? toLocalDatetimeInput(cuteTime) : "");
                       setEditLinkedinSchedule(liTime ? toLocalDatetimeInput(liTime) : "");
                       setEditPostToLinkedIn(!!isLiActive);
-                      
-                      // If times match (or LI wasn't scheduled), toggle sync ON
                       setEditSyncTimes(!liTime || cuteTime === liTime); 
                       
                       setPostToEdit(post); 
@@ -341,9 +336,10 @@ const MyPosts = ({
           </div>
         </div>
       )}
-      {/* 🚨 RESTORED DELETE CONFIRMATION MODAL */}
+
+      {/* 🚨 RESTORED DELETE CONFIRMATION MODAL - BOOSTED Z-INDEX */}
       {postToDelete && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToDelete(null)}>
+        <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToDelete(null)}>
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center" onClick={e => e.stopPropagation()}>
             <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <Trash2 size={24} />
@@ -357,9 +353,10 @@ const MyPosts = ({
           </div>
         </div>
       )}
-      {/* PREVIEW MODAL */}
+
+      {/* PREVIEW MODAL - BOOSTED Z-INDEX */}
       {postToPreview && (
-        <div className="fixed inset-0 z-150 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToPreview(null)}>
+        <div className="fixed inset-0 z-[1050] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToPreview(null)}>
           <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[95dvh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-white shrink-0">
               <h3 className="font-bold text-gray-800 flex items-center gap-2"><Eye size={18} className="text-brand-blue"/> Feed Preview</h3>
@@ -379,9 +376,9 @@ const MyPosts = ({
         </div>
       )}
 
-      {/* RICH TEXT EDIT MODAL */}
+      {/* RICH TEXT EDIT MODAL - BOOSTED Z-INDEX */}
       {postToEdit && (
-        <div className="fixed inset-0 z-150 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToEdit(null)}>
+        <div className="fixed inset-0 z-[1050] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToEdit(null)}>
           <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[95dvh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-slate-50 shrink-0">
               <h3 className="text-base sm:text-lg font-display font-bold text-gray-800 flex items-center gap-2"><Edit3 size={18} className="text-brand-blue" /> Edit {postToEdit.status === "scheduled" ? "Scheduled Post" : "Post"}</h3>

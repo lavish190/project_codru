@@ -8,13 +8,13 @@ const authenticate = require("../middleware/authenticate");
 // ==========================================
 router.get('/auth/connections', authenticate, async (req, res) => {
   try {
-    // req.user._id or req.userId depending on how your auth middleware sets it
     const userId = req.user ? req.user._id : req.userId; 
     
     const connections = await SocialConnection.find({ userId });
     
     const status = {
-      linkedin: connections.some(c => c.provider === 'linkedin'),
+      linkedin: connections.some(c => c.provider === 'linkedin' && c.accessToken),
+      facebook: connections.some(c => c.provider === 'facebook' && c.accessToken),
       // substack: connections.some(c => c.provider === 'substack'),
     };
     
@@ -26,16 +26,23 @@ router.get('/auth/connections', authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 1. REDIRECT TO LINKEDIN LOGIN
+// 1. REDIRECT TO PROVIDER LOGIN
 // ==========================================
 router.get('/auth/:provider/connect', authenticate, (req, res) => {
   const { provider } = req.params;
   
   if (provider === 'linkedin') {
-    // We pass req.userId into the 'state' parameter so we remember WHO is connecting
     const linkedInAuthUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${process.env.LINKEDIN_CLIENT_ID}&redirect_uri=${process.env.LINKEDIN_REDIRECT_URI}&scope=w_member_social%20profile%20openid&state=${req.userId}`; 
-    
     return res.json({ url: linkedInAuthUrl });
+  }
+
+  if (provider === 'facebook') {
+    const redirectUri = process.env.FACEBOOK_REDIRECT_URI;
+    const appId = process.env.FACEBOOK_APP_ID;
+    const scopes = 'pages_show_list,pages_read_engagement,pages_manage_posts,public_profile';
+
+    const fbAuthUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${req.userId}&scope=${scopes}`;
+    return res.json({ url: fbAuthUrl });
   }
 
   return res.status(400).json({ error: "Unsupported provider" });
@@ -48,21 +55,20 @@ router.get('/auth/:provider/callback', async (req, res) => {
   const { provider } = req.params;
   const { code, state: userId, error } = req.query;
 
-  // Where to send the user back to on your React frontend
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
   if (error) {
-    console.error("OAuth Error:", error);
-    return res.redirect(`${frontendUrl}/?error=AuthFailed`);
+    console.error(`OAuth Error (${provider}):`, error);
+    return res.redirect(`${frontendUrl}/?error=${provider}AuthFailed`);
   }
 
   if (!userId) {
     return res.redirect(`${frontendUrl}/?error=MissingUserId`);
   }
 
+  // --- LINKEDIN CALLBACK ---
   if (provider === 'linkedin') {
     try {
-      // A. Trade the authorization code for an Access Token
       const tokenResponse = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -71,7 +77,7 @@ router.get('/auth/:provider/callback', async (req, res) => {
           code: code,
           client_id: process.env.LINKEDIN_CLIENT_ID,
           client_secret: process.env.LINKEDIN_CLIENT_SECRET,
-          redirect_uri: process.env.LINKEDIN_REDIRECT_URI, // Must exactly match the .env
+          redirect_uri: process.env.LINKEDIN_REDIRECT_URI, 
         }),
       });
 
@@ -79,9 +85,8 @@ router.get('/auth/:provider/callback', async (req, res) => {
       if (!tokenResponse.ok) throw new Error(tokenData.error_description);
 
       const accessToken = tokenData.access_token;
-      const expiresIn = tokenData.expires_in; // Seconds until expiration (usually 60 days)
+      const expiresIn = tokenData.expires_in;
 
-      // B. Fetch the user's profile to get their unique LinkedIn URN
       const profileResponse = await fetch('https://api.linkedin.com/v2/userinfo', {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
@@ -89,29 +94,74 @@ router.get('/auth/:provider/callback', async (req, res) => {
       const profileData = await profileResponse.json();
       if (!profileResponse.ok) throw new Error("Failed to fetch LinkedIn profile");
 
-      // For personal profiles, the URN format is 'urn:li:person:{id}'
       const providerAccountId = `urn:li:person:${profileData.sub}`;
       const profileName = profileData.name;
       const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
 
-      // C. Save or update the connection in MongoDB
       await SocialConnection.findOneAndUpdate(
         { userId, provider: 'linkedin' },
+        { providerAccountId, profileName, accessToken, tokenExpiresAt },
+        { upsert: true, new: true }
+      );
+
+      return res.redirect(`${frontendUrl}/?success=linkedin_connected`);
+    } catch (err) {
+      console.error("LinkedIn OAuth Error:", err);
+      return res.redirect(`${frontendUrl}/?error=LinkedInTokenExchangeFailed`);
+    }
+  }
+
+  // --- FACEBOOK CALLBACK ---
+  if (provider === 'facebook') {
+    try {
+      const redirectUri = process.env.FACEBOOK_REDIRECT_URI;
+      const appId = process.env.FACEBOOK_APP_ID;
+      const appSecret = process.env.FACEBOOK_APP_SECRET;
+
+      // STEP A: Exchange the temporary code for a Short-Lived User Token
+      const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${redirectUri}&client_secret=${appSecret}&code=${code}`);
+      const tokenData = await tokenRes.json();
+      
+      if (tokenData.error) throw new Error(tokenData.error.message);
+      const shortLivedToken = tokenData.access_token;
+
+      // STEP B: Exchange for a Long-Lived User Token (60 days)
+      const longLivedRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${shortLivedToken}`);
+      const longLivedData = await longLivedRes.json();
+      
+      if (longLivedData.error) throw new Error(longLivedData.error.message);
+      const longLivedToken = longLivedData.access_token;
+
+      // STEP C: Fetch the User's Pages (using the long-lived token)
+      const pagesRes = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${longLivedToken}`);
+      const pagesData = await pagesRes.json();
+
+      if (!pagesData.data || pagesData.data.length === 0) {
+        return res.redirect(`${frontendUrl}/?error=no_facebook_pages_found`);
+      }
+
+      // Automatically link the FIRST page they manage
+      const selectedPage = pagesData.data[0]; 
+      const pageAccessToken = selectedPage.access_token;
+      const pageId = selectedPage.id;
+      const pageName = selectedPage.name;
+
+      // STEP D: Save the Permanent Page Token to MongoDB
+      await SocialConnection.findOneAndUpdate(
+        { userId, provider: 'facebook' },
         {
-          providerAccountId,
-          profileName,
-          accessToken,
-          tokenExpiresAt,
+          accessToken: pageAccessToken,
+          providerAccountId: pageId,
+          profileName: pageName,
+          updatedAt: new Date()
         },
         { upsert: true, new: true }
       );
 
-      // D. Redirect back to React frontend on success
-      return res.redirect(`${frontendUrl}/?success=linkedin_connected`);
-
+      return res.redirect(`${frontendUrl}/?success=facebook_connected`);
     } catch (err) {
-      console.error("LinkedIn OAuth Error:", err);
-      return res.redirect(`${frontendUrl}/?error=TokenExchangeFailed`);
+      console.error("Facebook OAuth processing error:", err);
+      return res.redirect(`${frontendUrl}/?error=FacebookTokenExchangeFailed`);
     }
   }
 
