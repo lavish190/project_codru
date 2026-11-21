@@ -70,53 +70,6 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
     fetchAllFeedData();
   }, [refreshTrigger]);
 
-  // 🚨 RESTORED: Like Function
-  const handleLike = async (postId: string) => {
-    setPosts(prevPosts => prevPosts.map(p => {
-      if (p._id !== postId) return p;
-      const isLiked = p.likedBy?.some((u: any) => (u._id || u) === currentUserId);
-      return {
-        ...p,
-        likes: isLiked ? Math.max(0, p.likes - 1) : p.likes + 1,
-        likedBy: isLiked ? p.likedBy.filter((u: any) => (u._id || u) !== currentUserId) : [...(p.likedBy || []), currentUserId]
-      };
-    }));
-
-    try {
-      const token = localStorage.getItem("jwtoken");
-      await fetch(`${import.meta.env.VITE_API}posts/${postId}/like`, { method: "POST", headers: { "Authorization": `Bearer ${token}` } });
-    } catch (error) {
-      console.error("Failed to like post", error);
-    }
-  };
-
-  // 🚨 RESTORED: Save Function
-  const handleSave = async (postId: string) => {
-    const isSaved = savedPostIds.includes(postId);
-    setSavedPostIds(prev => isSaved ? prev.filter(id => id !== postId) : [...prev, postId]);
-
-    try {
-      const token = localStorage.getItem("jwtoken");
-      await fetch(`${import.meta.env.VITE_API}posts/${postId}/save`, { method: "POST", headers: { "Authorization": `Bearer ${token}` } });
-    } catch (error) {
-      console.error("Failed to save post", error);
-    }
-  };
-
-  // 🚨 RESTORED: Follow Function
-  const handleFollow = async (targetUsername: string) => {
-    setFollowingUsernames(prev => [...prev, targetUsername]);
-    try {
-      const token = localStorage.getItem("jwtoken");
-      await fetch(`${import.meta.env.VITE_API}follow`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ currentUserId: currentUsername, targetUserId: targetUsername })
-      });
-    } catch (error) {
-      setFollowingUsernames(prev => prev.filter(u => u !== targetUsername));
-    }
-  };
 
   // 🚨 RESTORED: Delete Function
   const handleDeletePost = async (postId: string) => {
@@ -135,29 +88,6 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
       setAlert({ show: true, message: "Failed to delete post", type: "error" });
     }
   };
-
-  // 🚨 RESTORED: Comment Submit Function
-  const handleCommentSubmit = useCallback(async (postId: string, text: string, parentId?: string) => {
-    if (!text.trim() || isSubmitting[postId]) return;
-    setIsSubmitting(prev => ({ ...prev, [postId]: true }));
-
-    try {
-      const token = localStorage.getItem("jwtoken");
-      const res = await fetch(`${import.meta.env.VITE_API}posts/${postId}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ text, parentId })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPosts(prev => prev.map(p => p._id === postId ? { ...p, comments: data.comments } : p));
-      }
-    } catch (error) {
-      setAlert({ show: true, message: "Failed to post comment", type: "error" });
-    } finally {
-      setIsSubmitting(prev => ({ ...prev, [postId]: false }));
-    }
-  }, [isSubmitting]);
 
   // Edit Click Handler (Opens Modal)
   const handleEditClick = (post: any) => {
@@ -228,16 +158,10 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
           <PostCard 
             key={post._id} 
             post={post} 
-            currentUser={{ id: currentUserId, photo: userData?.Photo }} 
-            isSingleView={false}
-            onLike={handleLike} 
-            onSave={handleSave} 
-            onDelete={handleDeletePost}
-            onEdit={handleEditClick} 
-            onFollow={handleFollow}
-            savedPostIds={savedPostIds}
+            defaultIsSaved={savedPostIds.includes(post._id)} 
             followingUsernames={followingUsernames}
-            onCommentSubmit={handleCommentSubmit}
+            onDelete={handleDeletePost} // Parent handles delete to remove it from the feed array
+            onEdit={handleEditClick}    // Parent handles opening the edit modal
           />
         ))
       )}

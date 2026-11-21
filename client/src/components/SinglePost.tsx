@@ -13,7 +13,6 @@ const SinglePost = ({ userData }: any) => {
   const [error, setError] = useState("");
   const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
   
-  const currentUserId = localStorage.getItem("userId");
   const isLoggedIn = !!localStorage.getItem("jwtoken");
 
   useEffect(() => {
@@ -37,66 +36,14 @@ const SinglePost = ({ userData }: any) => {
     fetchPostData();
   }, [postId, isLoggedIn]);
 
-  // 🚨 OPTIMISTIC LIKES
-  const handleLike = async () => {
-    if (!isLoggedIn) return;
-    setPost((prev: any) => {
-      const isLiked = prev.likedBy?.some((u: any) => (u._id || u) === currentUserId);
-      return {
-        ...prev,
-        likes: isLiked ? Math.max(0, prev.likes - 1) : prev.likes + 1,
-        likedBy: isLiked ? prev.likedBy.filter((u: any) => (u._id || u) !== currentUserId) : [...(prev.likedBy || []), currentUserId]
-      };
-    });
-
-    try {
-      const token = localStorage.getItem("jwtoken");
-      await fetch(`${import.meta.env.VITE_API}posts/${post._id}/like`, { method: "POST", headers: { "Authorization": `Bearer ${token}` } });
-    } catch (error) {
-      console.error("Failed to like", error);
-    }
-  };
-
-  // 🚨 OPTIMISTIC SAVES
-  const handleSave = async () => {
-    if (!isLoggedIn) return;
-    const isSaved = savedPostIds.includes(post._id);
-    setSavedPostIds(prev => isSaved ? prev.filter(id => id !== post._id) : [...prev, post._id]);
-
-    try {
-      const token = localStorage.getItem("jwtoken");
-      await fetch(`${import.meta.env.VITE_API}posts/${post._id}/save`, { method: "POST", headers: { "Authorization": `Bearer ${token}` } });
-    } catch (error) {
-      console.error("Failed to save", error);
-    }
-  };
-
   const handleDeletePost = async () => {
     if (!window.confirm("Are you sure you want to delete this post?")) return;
     try {
       const token = localStorage.getItem("jwtoken");
       const res = await fetch(`${import.meta.env.VITE_API}posts/${post._id}`, { method: "DELETE", headers: { "Authorization": `Bearer ${token}` } });
-      if (res.ok) navigate("/");
+      if (res.ok) navigate("/"); // Go home after deleting a single post
     } catch (err) {
       console.error("Failed to delete", err);
-    }
-  };
-
-  const handleCommentSubmit = async (postId: string, text: string) => {
-    if (!text.trim() || !isLoggedIn) return;
-    try {
-      const token = localStorage.getItem("jwtoken");
-      const res = await fetch(`${import.meta.env.VITE_API}posts/${post._id}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ text })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPost({ ...post, comments: data.comments });
-      }
-    } catch (error) {
-      console.error("Failed to post comment", error);
     }
   };
 
@@ -109,15 +56,13 @@ const SinglePost = ({ userData }: any) => {
         <ArrowLeft className="w-5 h-5" /> Back
       </button>
 
+      {/* 🚨 Clean Smart Component Call */}
       <PostCard 
         post={post} 
-        currentUser={{ id: currentUserId, photo: userData?.Photo }} 
         isSingleView={true}
-        onLike={handleLike} 
-        onSave={handleSave} 
+        defaultIsSaved={savedPostIds.includes(post._id)}
+        followingUsernames={[post.userId?.username]}
         onDelete={handleDeletePost}
-        savedPostIds={savedPostIds}
-        onCommentSubmit={handleCommentSubmit}
       />
     </div>
   );

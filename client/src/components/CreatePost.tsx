@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-// 🚨 ADDED "Facebook" to lucide-react imports
 import { Image as ImageIcon, X, Loader2, Send, Clock, Maximize2, Minimize2, CheckCircle2, Trash2, Globe, ChevronLeft, ChevronRight, MoveLeft, MoveRight, Plus} from "lucide-react";
 import Muialert from "./Muialert";
 import { UserData } from "../App";
@@ -15,8 +14,12 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const DRAFT_KEY = `cute_post_draft_${userData._id}`;
   const SCHEDULE_DRAFT_KEY = `cute_post_schedule_draft_${userData._id}`;
   const LINKEDIN_DRAFT_KEY = `cute_post_linkedin_draft_${userData._id}`;
-  // 🚨 ADDED FACEBOOK DRAFT KEY
   const FACEBOOK_DRAFT_KEY = `cute_post_facebook_draft_${userData._id}`;
+
+  // 🚨 SECURITY CHECK: Hide social toggles for students
+  const isStudent = userData?.Role?.toLowerCase() === "student";
+  const hasAdminOverride = (userData as any)?.socialOverride === true; 
+  const showSocialToggles = !isStudent || hasAdminOverride;
 
   const [content, setContent] = useState(() => localStorage.getItem(DRAFT_KEY) || "");
   const [isContentEmpty, setIsContentEmpty] = useState(!content);
@@ -24,7 +27,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   
-  // 🚨 ADDED FACEBOOK TO TIMES OBJECT
   const savedScheduleRaw = localStorage.getItem(SCHEDULE_DRAFT_KEY);
   let initialScheduleConfig = { isScheduled: false, syncTimes: true, times: { cute: "", linkedin: "", facebook: "" } };
 
@@ -38,12 +40,13 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
   const [scheduleConfig, setScheduleConfig] = useState(initialScheduleConfig);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  
+  // 🚨 RESTORED DROPDOWN STATE
   const [isSocialMenuOpen, setIsSocialMenuOpen] = useState(false);
 
   const [isLinkedInConnected, setIsLinkedInConnected] = useState(false);
   const [postToLinkedIn, setPostToLinkedIn] = useState(false);
   
-  // 🚨 ADDED FACEBOOK CONNECTION STATE
   const [isFacebookConnected, setIsFacebookConnected] = useState(false);
   const [postToFacebook, setPostToFacebook] = useState(false);
 
@@ -67,7 +70,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
         });
         const data = await res.json();
         setIsLinkedInConnected(data.linkedin); 
-        // 🚨 LOAD FACEBOOK CONNECTION STATUS
         setIsFacebookConnected(data.facebook); 
       } catch (err) {
         console.error("Failed to fetch social connections");
@@ -112,15 +114,10 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       }
 
       const savedLinkedIn = localStorage.getItem(`cute_post_linkedin_draft_${userData._id}`);
-      if (savedLinkedIn === "true") {
-        setPostToLinkedIn(true);
-      }
+      if (savedLinkedIn === "true") setPostToLinkedIn(true);
       
-      // 🚨 LOAD FACEBOOK DRAFT PREFERENCE
       const savedFacebook = localStorage.getItem(`cute_post_facebook_draft_${userData._id}`);
-      if (savedFacebook === "true") {
-        setPostToFacebook(true);
-      }
+      if (savedFacebook === "true") setPostToFacebook(true);
     }
   }, [userData?._id]); 
 
@@ -138,13 +135,13 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
   const LinkedinIcon = ({ className }: { className?: string }) => (
     <svg className={className} fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+      <path d="M4.98 3.5c0 1.381-1.11 2.5-2.48 2.5s-2.48-1.119-2.48-2.5c0-1.38 1.11-2.5 2.48-2.5s2.48 1.12 2.48 2.5zm.02 4.5h-5v16h5v-16zm7.982 0h-4.968v16h4.969v-8.399c0-4.6 6.029-5.056 6.029 0v8.399h4.988v-10.131c0-7.88-8.922-7.593-11.018-3.714v-2.155z"/>
     </svg>
   );
 
   const FacebookIcon = ({ className }: { className?: string }) => (
     <svg className={className} fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-3 7h-1.924c-.615 0-1.076.252-1.076.889v1.111h3l-.239 3h-2.761v8h-3v-8h-2v-3h2v-1.923c0-2.022 1.064-3.077 3.461-3.077h2.539v3z"/>
+      <path d="M14 13.5h2.5l1-4H14v-2c0-1.03 0-2 2-2h1.5V2.14c-.326-.043-1.557-.14-2.857-.14C11.928 2 10 3.657 10 6.7v2.8H7v4h3V22h4v-8.5z"/>
     </svg>
   );
 
@@ -163,17 +160,12 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     if (isLinkedInConnected) {
       const newState = !postToLinkedIn;
       setPostToLinkedIn(newState);
-      if (newState) {
-        localStorage.setItem(LINKEDIN_DRAFT_KEY, "true");
-      } else {
-        localStorage.removeItem(LINKEDIN_DRAFT_KEY);
-      }
+      if (newState) localStorage.setItem(LINKEDIN_DRAFT_KEY, "true");
+      else localStorage.removeItem(LINKEDIN_DRAFT_KEY);
     } else {
       try {
         const token = localStorage.getItem("jwtoken");
-        const res = await fetch(`${import.meta.env.VITE_API}auth/linkedin/connect`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
+        const res = await fetch(`${import.meta.env.VITE_API}auth/linkedin/connect`, { headers: { "Authorization": `Bearer ${token}` } });
         const data = await res.json();
         if (data.url) window.location.href = data.url; 
       } catch (err) {
@@ -182,22 +174,16 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     }
   };
 
-  // 🚨 ADDED FACEBOOK TOGGLE HANDLER (Identical to LinkedIn)
   const handleFacebookToggle = async () => {
     if (isFacebookConnected) {
       const newState = !postToFacebook;
       setPostToFacebook(newState);
-      if (newState) {
-        localStorage.setItem(FACEBOOK_DRAFT_KEY, "true");
-      } else {
-        localStorage.removeItem(FACEBOOK_DRAFT_KEY);
-      }
+      if (newState) localStorage.setItem(FACEBOOK_DRAFT_KEY, "true");
+      else localStorage.removeItem(FACEBOOK_DRAFT_KEY);
     } else {
       try {
         const token = localStorage.getItem("jwtoken");
-        const res = await fetch(`${import.meta.env.VITE_API}auth/facebook/connect`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
+        const res = await fetch(`${import.meta.env.VITE_API}auth/facebook/connect`, { headers: { "Authorization": `Bearer ${token}` } });
         const data = await res.json();
         if (data.url) window.location.href = data.url; 
       } catch (err) {
@@ -247,10 +233,7 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     try {
       await fetch(`${import.meta.env.VITE_API}posts/images`, {
         method: "DELETE",
-        headers: { 
-          "Content-Type": "application/json", 
-          "Authorization": `Bearer ${localStorage.getItem("jwtoken")}` 
-        },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("jwtoken")}` },
         body: JSON.stringify({ urls: urlsToDelete })
       });
     } catch (err) {
@@ -276,11 +259,9 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
   const clearDraft = () => {
     deleteImagesFromCloudinary(imageUrls); 
-
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(SCHEDULE_DRAFT_KEY);
     localStorage.removeItem(LINKEDIN_DRAFT_KEY); 
-    // 🚨 ADDED FACEBOOK CLEAR
     localStorage.removeItem(FACEBOOK_DRAFT_KEY); 
     localStorage.removeItem(`cute_post_images_draft_${userData?._id}`); 
     
@@ -289,10 +270,8 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     setScheduleConfig({ isScheduled: false, syncTimes: true, times: { cute: "", linkedin: "", facebook: "" } });
     setShowScheduleModal(false);
     setPostToLinkedIn(false);
-    // 🚨 RESET FACEBOOK TOGGLE
     setPostToFacebook(false);
     setHasDraft(false);
-    
     setImageUrls([]);
   };
 
@@ -351,7 +330,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     }
 
     setIsUploading(true);
-    let finalImageUrls: string[] = imageUrls;
 
     try {
       const token = localStorage.getItem("jwtoken");
@@ -366,7 +344,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
           status: scheduleConfig.isScheduled ? 'scheduled' : 'posted',
           scheduledFor: scheduleConfig.isScheduled ? new Date(scheduleConfig.syncTimes ? scheduleConfig.times.cute : scheduleConfig.times.linkedin).toISOString() : null
         } : { status: 'unselected' },
-        // 🚨 ADDED FACEBOOK TO PAYLOAD
         facebook: postToFacebook ? {
           status: scheduleConfig.isScheduled ? 'scheduled' : 'posted',
           scheduledFor: scheduleConfig.isScheduled ? new Date(scheduleConfig.syncTimes ? scheduleConfig.times.cute : scheduleConfig.times.facebook).toISOString() : null
@@ -378,7 +355,7 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({
           content,
-          images: finalImageUrls, 
+          images: imageUrls, 
           distribution 
         }),
       });
@@ -417,7 +394,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
 
         {scheduleConfig.isScheduled && (
           <div className="space-y-4">
-            {/* 🚨 Check for BOTH social platforms for the Sync Times option */}
             {(postToLinkedIn || postToFacebook) && (
                <div className="flex items-center justify-between bg-blue-50/50 p-2 rounded-lg">
                  <span className="text-xs font-semibold text-gray-600">Same time for all platforms</span>
@@ -439,7 +415,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
               </div>
             )}
             
-            {/* 🚨 ADDED FACEBOOK SCHEDULING INPUT */}
             {!scheduleConfig.syncTimes && postToFacebook && (
               <div className="space-y-1">
                 <label className="text-xs font-bold text-blue-600 flex items-center gap-1"><FacebookIcon className="w-4 h-4"/> Facebook</label>
@@ -453,97 +428,110 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   };
 
   const renderActionToolbar = (layout: "compact" | "expanded") => (
-  <div className={`flex items-center justify-between ${layout === "compact" ? "mt-4 ml-0 sm:ml-16" : "mt-6"} relative`}>
-    
-    <div className="flex items-center gap-1 sm:gap-2">
-      <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 text-brand-blue hover:text-brand-orange hover:bg-orange-50 px-2 sm:px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 text-sm" disabled={isUploading}>
-        <ImageIcon className="w-4 h-4" />
-        <span className="hidden sm:inline">Photo</span>
-      </button>
-      <input type="file" accept="image/*" multiple ref={fileInputRef} className="hidden" onChange={handleImageSelect} />
-
-      <div 
-        className="relative flex items-center justify-center"
-        onMouseEnter={() => setIsSocialMenuOpen(true)}
-        onMouseLeave={() => setIsSocialMenuOpen(false)}
-      >
-        <button 
-          type="button" 
-          onClick={() => setIsSocialMenuOpen((prev) => !prev)}
-          className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors ${
-            postToLinkedIn || postToFacebook ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-          }`}
-        >
-          {/* 🚨 DYNAMIC MAIN ICON */}
-          {(postToLinkedIn && postToFacebook) ? <Globe className="w-4 h-4" /> : postToLinkedIn ? <LinkedinIcon className="w-4 h-4" /> : postToFacebook ? <FacebookIcon className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
+    <div className={`flex items-center justify-between ${layout === "compact" ? "mt-4 ml-0 sm:ml-16" : "mt-6"} relative`}>
+      
+      <div className="flex items-center gap-1 sm:gap-2">
+        <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 text-brand-blue hover:text-brand-orange hover:bg-orange-50 px-2 sm:px-3 py-1.5 rounded-full font-semibold transition-colors disabled:opacity-50 text-sm" disabled={isUploading}>
+          <ImageIcon className="w-4 h-4" />
+          <span className="hidden sm:inline">Photo</span>
         </button>
-        
-        <div className="absolute bottom-full w-full h-3"></div>
+        <input type="file" accept="image/*" multiple ref={fileInputRef} className="hidden" onChange={handleImageSelect} />
 
-        <div className={`absolute bottom-[calc(100%+0.25rem)] flex flex-col gap-2 bg-white border border-gray-100 shadow-xl rounded-full p-1.5 transition-all duration-200 z-20 ${isSocialMenuOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-2'}`}>
-          <button 
-            type="button" 
-            onClick={() => {
-              handleLinkedInToggle();
-              setIsSocialMenuOpen(false);
-            }}
-            className={`p-2 rounded-full transition-colors flex items-center justify-center ${postToLinkedIn ? 'bg-blue-50 text-[#0A66C2]' : 'text-gray-400 hover:text-[#0A66C2] hover:bg-blue-50'}`}
-            title={isLinkedInConnected ? (postToLinkedIn ? "Disable LinkedIn" : "Enable LinkedIn") : "Connect LinkedIn"}
+        {/* 🚨 DYNAMIC STACK TRIGGER & HOVER DROPDOWN MENU */}
+        {showSocialToggles && (
+          <div 
+            className="relative flex items-center justify-center ml-2"
+            onMouseEnter={() => setIsSocialMenuOpen(true)}
+            onMouseLeave={() => setIsSocialMenuOpen(false)}
           >
-            <LinkedinIcon className="w-4 h-4" />
+            {/* The Main Trigger Button */}
+            <button 
+              type="button" 
+              onClick={() => setIsSocialMenuOpen((prev) => !prev)}
+              className={`flex items-center justify-center h-8 rounded-full transition-colors z-10 ${
+                postToLinkedIn || postToFacebook ? 'px-1 bg-blue-50/50 hover:bg-blue-50' : 'w-8 bg-gray-50 hover:bg-gray-100 text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {!(postToLinkedIn || postToFacebook) ? (
+                <Globe className="w-4 h-4" />
+              ) : (
+                <div className="flex items-center -space-x-1.5 p-0.5">
+                  {postToFacebook && (
+                    <div className="w-6 h-6 rounded-full bg-[#1877F2] border-2 border-white flex items-center justify-center z-20 shadow-sm transition-transform hover:scale-110">
+                      <FacebookIcon className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                  {postToLinkedIn && (
+                    <div className="w-6 h-6 rounded-full bg-[#0A66C2] border-2 border-white flex items-center justify-center z-10 shadow-sm transition-transform hover:scale-110">
+                      <LinkedinIcon className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                </div>
+              )}
+            </button>
+            
+            {/* Invisible bridge to keep hover active */}
+            <div className="absolute bottom-full w-full h-3"></div>
+
+            {/* The Hover Dropdown */}
+            <div className={`absolute bottom-[calc(100%+0.25rem)] flex flex-col gap-2 bg-white border border-gray-100 shadow-xl rounded-full p-1.5 transition-all duration-200 z-30 ${isSocialMenuOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible translate-y-2'}`}>
+              <button 
+                type="button" 
+                onClick={() => { handleFacebookToggle(); setIsSocialMenuOpen(false); }}
+                className={`w-8 h-8 rounded-full transition-colors flex items-center justify-center ${postToFacebook ? 'bg-[#1877F2] text-white shadow-md' : 'bg-gray-50 text-gray-400 hover:text-[#1877F2] hover:bg-blue-50'}`}
+                title={isFacebookConnected ? (postToFacebook ? "Disable Facebook" : "Enable Facebook") : "Connect Facebook"}
+              >
+                <FacebookIcon className="w-4 h-4" />
+              </button>
+
+              <button 
+                type="button" 
+                onClick={() => { handleLinkedInToggle(); setIsSocialMenuOpen(false); }}
+                className={`w-8 h-8 rounded-full transition-colors flex items-center justify-center ${postToLinkedIn ? 'bg-[#0A66C2] text-white shadow-md' : 'bg-gray-50 text-gray-400 hover:text-[#0A66C2] hover:bg-blue-50'}`}
+                title={isLinkedInConnected ? (postToLinkedIn ? "Disable LinkedIn" : "Enable LinkedIn") : "Connect LinkedIn"}
+              >
+                <LinkedinIcon className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3 sm:gap-4 relative justify-end">
+        
+        {hasDraft && (
+          <button type="button" onClick={clearDraft} className="hidden sm:block text-xs font-bold text-gray-400 hover:text-red-500 transition-colors whitespace-nowrap">
+            Clear Draft
           </button>
-          
-          {/* 🚨 ADDED FACEBOOK BUTTON TO MENU */}
+        )}
+
+        {renderScheduleModal()}
+
+        <div className={`shrink-0 flex items-stretch bg-brand-orange rounded-full transition-all divide-x divide-white/20 overflow-hidden ${!isReadyToSubmit ? 'opacity-50 grayscale-[15%]' : 'shadow-sm hover:shadow-md hover:-translate-y-0.5'}`}>
           <button 
             type="button" 
-            onClick={() => {
-              handleFacebookToggle();
-              setIsSocialMenuOpen(false);
-            }}
-            className={`p-2 rounded-full transition-colors flex items-center justify-center ${postToFacebook ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
-            title={isFacebookConnected ? (postToFacebook ? "Disable Facebook" : "Enable Facebook") : "Connect Facebook"}
+            onClick={(e) => handleSubmit(e)} 
+            disabled={!isReadyToSubmit} 
+            className="text-white pl-4 pr-2.5 py-1.5 text-[13px] sm:text-sm font-bold flex items-center gap-1.5 transition-colors disabled:cursor-not-allowed hover:bg-orange-600 disabled:hover:bg-transparent"
           >
-            <FacebookIcon className="w-4 h-4" />
+            {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            <span>{scheduleConfig.isScheduled ? "Schedule" : "Post"}</span>
+          </button>
+
+          <button 
+            type="button" 
+            onClick={() => setShowScheduleModal(!showScheduleModal)} 
+            disabled={!isReadyToSubmit && !scheduleConfig.isScheduled}
+            className={`text-white pr-3 pl-2.5 flex items-center justify-center transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent ${showScheduleModal || scheduleConfig.isScheduled ? 'bg-orange-600' : 'hover:bg-orange-600'}`}
+            title="Schedule Post Options"
+          >
+            <Clock className="w-3.5 h-3.5" />
           </button>
         </div>
+
       </div>
     </div>
-
-    <div className="flex items-center gap-3 sm:gap-4 relative justify-end">
-      
-      {hasDraft && (
-        <button type="button" onClick={clearDraft} className="hidden sm:block text-xs font-bold text-gray-400 hover:text-red-500 transition-colors whitespace-nowrap">
-          Clear Draft
-        </button>
-      )}
-
-      {renderScheduleModal()}
-
-      <div className={`shrink-0 flex items-stretch bg-brand-orange rounded-full transition-all divide-x divide-white/20 overflow-hidden ${!isReadyToSubmit ? 'opacity-50 grayscale-[15%]' : 'shadow-sm hover:shadow-md hover:-translate-y-0.5'}`}>
-        <button 
-          type="button" 
-          onClick={(e) => handleSubmit(e)} 
-          disabled={!isReadyToSubmit} 
-          className="text-white pl-4 pr-2.5 py-1.5 text-[13px] sm:text-sm font-bold flex items-center gap-1.5 transition-colors disabled:cursor-not-allowed hover:bg-orange-600 disabled:hover:bg-transparent"
-        >
-          {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-          <span>{scheduleConfig.isScheduled ? "Schedule" : "Post"}</span>
-        </button>
-
-        <button 
-          type="button" 
-          onClick={() => setShowScheduleModal(!showScheduleModal)} 
-          disabled={!isReadyToSubmit && !scheduleConfig.isScheduled}
-          className={`text-white pr-3 pl-2.5 flex items-center justify-center transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent ${showScheduleModal || scheduleConfig.isScheduled ? 'bg-orange-600' : 'hover:bg-orange-600'}`}
-          title="Schedule Post Options"
-        >
-          <Clock className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-    </div>
-  </div>
-);
+  );
 
   return (
     <>
@@ -691,19 +679,13 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
         </div>
       )}
 
-      {/* ==========================================
-          FULL SCREEN APPLE-STYLE IMAGE VIEWER 
-      ========================================== */}
       {viewerIndex !== null && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-200" onClick={() => setViewerIndex(null)}>
-          
           <div className="absolute top-0 left-0 right-0 p-4 sm:p-6 flex justify-between items-center z-20 bg-gradient-to-b from-black/80 to-transparent">
-            
             <div className="flex items-center gap-4 sm:gap-6">
               <span className="text-white/90 font-medium text-sm sm:text-base tracking-widest bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md">
                 {viewerIndex + 1} / {imageUrls.length}
               </span>
-              
               <div className="flex items-center gap-1 sm:gap-2 bg-black/40 rounded-full p-1 backdrop-blur-md">
                 <button onClick={(e) => moveImage(e, viewerIndex, "left")} disabled={viewerIndex === 0} className="p-2 text-white disabled:text-white/20 hover:bg-white/20 rounded-full transition-colors" title="Move Left">
                   <MoveLeft className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -712,14 +694,12 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
                   <MoveRight className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
-
               {imageUrls.length < 9 && (
                 <button onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }} className="flex items-center gap-1.5 text-sm font-medium text-white bg-brand-orange hover:bg-orange-600 px-3 py-1.5 rounded-full transition-colors shadow-lg">
                   <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Photo</span>
                 </button>
               )}
             </div>
-
             <div className="flex items-center gap-2 sm:gap-4">
               <button onClick={(e) => removeImageFromViewer(e)} className="text-white/80 hover:text-red-500 transition-colors p-2 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-md" title="Delete Photo">
                 <Trash2 className="w-5 h-5 sm:w-5 sm:h-5" />
@@ -729,41 +709,23 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
               </button>
             </div>
           </div>
-
           {viewerIndex > 0 && (
-            <button 
-              onClick={prevViewerImage}
-              className="absolute left-2 sm:left-8 text-white p-3 sm:p-4 rounded-full bg-white/5 hover:bg-white/20 backdrop-blur-md transition-all hover:scale-110 z-10"
-            >
+            <button onClick={prevViewerImage} className="absolute left-2 sm:left-8 text-white p-3 sm:p-4 rounded-full bg-white/5 hover:bg-white/20 backdrop-blur-md transition-all hover:scale-110 z-10">
               <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
             </button>
           )}
-
           <div className="relative w-full max-w-6xl px-16 sm:px-28 flex justify-center items-center h-full" onClick={(e) => e.stopPropagation()}>
-            <img 
-              src={imageUrls[viewerIndex]} 
-              alt="Full screen view" 
-              className="max-h-[75vh] sm:max-h-[85vh] max-w-full object-contain rounded-md shadow-2xl animate-in zoom-in-95 duration-200"
-            />
+            <img src={imageUrls[viewerIndex]} alt="Full screen view" className="max-h-[75vh] sm:max-h-[85vh] max-w-full object-contain rounded-md shadow-2xl animate-in zoom-in-95 duration-200" />
           </div>
-
           {viewerIndex < imageUrls.length - 1 && (
-            <button 
-              onClick={nextViewerImage}
-              className="absolute right-2 sm:right-8 text-white p-3 sm:p-4 rounded-full bg-white/5 hover:bg-white/20 backdrop-blur-md transition-all hover:scale-110 z-10"
-            >
+            <button onClick={nextViewerImage} className="absolute right-2 sm:right-8 text-white p-3 sm:p-4 rounded-full bg-white/5 hover:bg-white/20 backdrop-blur-md transition-all hover:scale-110 z-10">
               <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
             </button>
           )}
-
           {imageUrls.length > 1 && (
             <div className="absolute bottom-6 sm:bottom-8 left-0 right-0 flex justify-center gap-2 sm:gap-3 px-4 z-10" onClick={(e) => e.stopPropagation()}>
               {imageUrls.map((thumb, idx) => (
-                <button 
-                  key={idx} 
-                  onClick={() => setViewerIndex(idx)}
-                  className={`h-12 w-12 sm:h-16 sm:w-16 rounded-lg overflow-hidden transition-all duration-300 shadow-lg ${viewerIndex === idx ? 'ring-2 ring-brand-orange scale-110 opacity-100' : 'opacity-40 hover:opacity-100 hover:-translate-y-1'}`}
-                >
+                <button key={idx} onClick={() => setViewerIndex(idx)} className={`h-12 w-12 sm:h-16 sm:w-16 rounded-lg overflow-hidden transition-all duration-300 shadow-lg ${viewerIndex === idx ? 'ring-2 ring-brand-orange scale-110 opacity-100' : 'opacity-40 hover:opacity-100 hover:-translate-y-1'}`}>
                   <img src={thumb} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
                 </button>
               ))}

@@ -23,7 +23,8 @@ import {
   Mail,
   CalendarDays,
   FileText,
-  Settings2
+  Settings2,
+  Globe // 🚨 Added Globe icon for Integrations
 } from "lucide-react";
 
 // 1. Keep universal components statically imported (everyone needs these instantly)
@@ -61,6 +62,8 @@ const ManageBlogs = lazy(() => import("./ManageBlogs"));
 const ExpertConnect = lazy(() => import("./ExpertConnect"));
 const HandshakeDrawer = lazy(() => import("./HandshakeDrawer"));
 
+// 🚨 LAZY LOAD INTEGRATIONS
+const SocialIntegrations = lazy(() => import("./SocialIntegrations"));
 
 interface DashboardProps {
   userData: UserData;
@@ -89,6 +92,8 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // 1. Define who gets to see what
+  const isStudent = userData.Role?.toLowerCase() === "student";
+  const hasAdminOverride = (userData as any)?.socialOverride === true; 
   const isPremiumTeacher = userData.Role === "Teacher" && userData.isVerifiedStaff;
   const isUnverifiedTeacher = userData.Role === "Teacher" && !userData.isVerifiedStaff;
   const isParent = userData.Role === "Parent"; 
@@ -119,7 +124,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
       "the-village": "The Village (Q&A)", "expert-connect": "Expert Connect",
       "whatsapp-crm": "WhatsApp Support","BulkEmails":"BulkEmails", "admin-internship":"Internship Management",
       "counselor-schedule": "My Schedule", "admissions-desk": "Admissions Desk", "create-blog": "Publish Blog",
-      "manage-blogs": "Manage Blogs",
+      "manage-blogs": "Manage Blogs", integrations: "Integrations" // 🚨 Added to map
     };
     return viewToTabMap[currentView] || "Overview";
   });
@@ -130,14 +135,12 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
   useEffect(() => {
     const checkTeamStatus = async () => {
       try {
-        // Safely grab the username from local storage just like the rest of your app does
         const currentUsername = localStorage.getItem("Username") || localStorage.getItem("username");
         if (!currentUsername) return;
 
         const res = await fetch(`${import.meta.env.VITE_API}team`);
         if (res.ok) {
           const team = await res.json();
-          // Check if current user is in the team array
           const inTeam = team.some((member: any) => member.username === currentUsername);
           setIsTeamMember(inTeam || !!userData?.isAdmin);
         }
@@ -147,16 +150,12 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
     };
     
     checkTeamStatus();
-  }, [userData?.isAdmin]); // Re-run if their admin status loads/changes
+  }, [userData?.isAdmin]);
 
-  
-  // Inside Dashboard.tsx
   useEffect(() => {
     const syncViewWithStorage = () => {
       const savedView = localStorage.getItem("currentView");
       const savedTab = localStorage.getItem("activeTab");
-
-      // Map 'Overview' to the correct case if necessary
       const normalizedView = savedView === "Overview" ? "Overview" : savedView?.toLowerCase();
 
       if (normalizedView && normalizedView !== currentView) {
@@ -164,14 +163,12 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         if (savedTab) setActiveTab(savedTab);
       }
     };
-
-    // Run whenever the URL changes (triggered by navigate('/dashboard') in the widget)
     syncViewWithStorage();
   }, [location]); 
 
   useEffect(() => {
       const fetchOverviewData = async () => {
-          setIsOverviewLoading(true); // 🚨 Start loading
+          setIsOverviewLoading(true);
           try {
               const token = localStorage.getItem("jwtoken");
               const res = await fetch(`${import.meta.env.VITE_API}dashboard-overview`, {
@@ -184,21 +181,11 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
           } catch (err) {
               console.error("Overview fetch failed", err);
           } finally {
-              setIsOverviewLoading(false); // 🚨 Stop loading
+              setIsOverviewLoading(false); 
           }
       };
       fetchOverviewData();
   }, [userData.Role]);
-
-  // useEffect(() => {
-  //   const params = new URLSearchParams(window.location.search);
-  //   const urlToken = params.get("token");
-
-  //   if (urlToken) {
-  //     localStorage.setItem("jwtoken", urlToken);
-  //     window.history.replaceState({}, document.title, "/dashboard");
-  //   }
-  // }, []);
 
   useEffect(() => {
     const stateView = location.state?.targetView;
@@ -240,6 +227,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         "admissions-desk": "Admissions Desk",
         "create-blog": "Publish Blog",
         "manage-blogs": "Manage Blogs",
+        "integrations": "Integrations" // 🚨 Added to map
       };
 
       setActiveTab(viewToTabMap[target] || "Dashboard"); 
@@ -381,9 +369,18 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
       { text: "Schedule", icon: <CalendarClock size={22} />, view: "schedule" },
       { text: "Profile", icon: <User size={22} />, view: "profile" },
       { text: "Settings", icon: <Settings size={22} />, view: "settings" },
-      { text: "My Posts", icon: <Rss size={22} />, view: "my-posts" },
-      { text: "Saved Posts", icon: <Bookmark size={22} />, view: "saved-posts" },
     ];
+
+    // 🚨 ADD INTEGRATIONS (Only for authorized users)
+    if (!isStudent || hasAdminOverride) {
+      basicItems.push({ text: "Integrations", icon: <Globe size={22} />, view: "integrations" });
+    }
+
+    // Add remaining basic items
+    basicItems.push(
+      { text: "My Posts", icon: <Rss size={22} />, view: "my-posts" },
+      { text: "Saved Posts", icon: <Bookmark size={22} />, view: "saved-posts" }
+    );
 
     const premiumItems = [];
     if (!isParent) {
@@ -413,7 +410,6 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
       teamItems.push({ text: "Manage Blogs", icon: <Settings2 size={22} />, view: "manage-blogs" });
     }
 
-
     const adminItems = [];
     if (userData.isAdmin) {
       adminItems.push({ text: "Management", icon: <Briefcase size={22} />, view: "crm" });
@@ -424,7 +420,6 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
       adminItems.push({ text: "Internship Management", icon: <Zap size={22} />, view: "admin-internship" });
     }
 
-    // --- 1. SINGLE LIST ITEM RENDERER (Used for both Desktop & Mobile) ---
     const renderListItem = (item: any) => {
       const isActive = activeTab === item.text;
       return (
@@ -443,7 +438,6 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
                 localStorage.setItem("currentView", item.view);
                 localStorage.setItem("activeTab", item.text);
               }
-              // 🚨 THE FIX: Automatically close the sidebar on mobile when a link is clicked!
               setIsSidebarOpen(false); 
             }}
             sx={{
@@ -475,7 +469,6 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
       );
     };
 
-    // --- 2. HELPER TO RENDER CATEGORY GROUPS ---
     const renderGroup = (title: string, items: any[], colorClass: string) => {
       if (items.length === 0) return null;
       return (
@@ -493,21 +486,15 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
       );
     };
 
-    // --- 3. RETURN THE UNIFIED LIST ---
     return (
       <List className="flex-1 overflow-y-auto px-2 py-2 custom-scrollbar flex flex-col">
-        
-        {/* Basic Items (No Header) */}
         {renderGroup("", basicItems, "")}
-        
-        {/* Category Headers */}
         {renderGroup("Guidance & Support", parentItems, "text-rose-400")}
         {renderGroup("Academy Tools", premiumItems, "text-slate-400")}
         {renderGroup("Counselor Tools", counselorItems, "text-[#ed7f23]")}
         {renderGroup("Marketing", teamItems, "text-purple-500")}
         {renderGroup("Admin Tools", adminItems, "text-brand-blue")}
         
-        {/* Unverified Teacher Banner */}
         {isUnverifiedTeacher && (
           <div className="mt-6 mx-4 bg-linear-to-br from-brand-blue to-blue-600 rounded-2xl p-5 text-white text-center shadow-lg">
             <Lock className="mx-auto mb-2 opacity-80" size={24} />
@@ -521,43 +508,24 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
           </div>
         )}
 
-        {/* Desktop Logout Button (Hidden on mobile because mobile users sign out from the Profile popup) */}
         <ListItem disablePadding className="mt-auto pt-8 mb-4 px-2 hidden md:block">
           <ListItemButton onClick={SignOut} sx={{ borderRadius: "12px", color: "#e11d48", "&:hover": { backgroundColor: "#fff1f2" } }}>
             <ListItemIcon sx={{ color: "inherit", minWidth: "40px" }}><LogOut size={22} /></ListItemIcon>
-            <ListItemText 
-              primary="Sign Out" 
-              slotProps={{ 
-                primary: { 
-                  sx: { fontWeight: 700 } 
-                } 
-              }} 
-            />
+            <ListItemText primary="Sign Out" slotProps={{ primary: { sx: { fontWeight: 700 } } }} />
           </ListItemButton>
         </ListItem>
-        
       </List>
     );
   },[
-    // React will ONLY rebuild the sidebar if one of these exact values changes
-    activeTab, 
-    isPremiumTeacher, 
-    isUnverifiedTeacher, 
-    isParent, 
-    isUnverifiedParent, 
-    isCounselor, 
-    isTeamMember, 
-    userData.isAdmin,
-    handleNavigation,
-    SignOut
+    activeTab, isStudent, hasAdminOverride, // 🚨 Dependencies updated
+    isPremiumTeacher, isUnverifiedTeacher, isParent, isUnverifiedParent, 
+    isCounselor, isTeamMember, userData.isAdmin, handleNavigation, SignOut
   ]);
 
   return (
     <div className="fixed inset-0 flex h-dvh w-full bg-slate-50 overflow-hidden font-body overscroll-none">
       
-      {/* =========================================
-          DESKTOP LEFT SIDEBAR (Hidden on Mobile) 
-      ========================================= */}
+      {/* DESKTOP SIDEBAR */}
       <div className="hidden md:flex relative w-72 bg-white border-r border-gray-100 flex-col shadow-lg shrink-0 z-110">
         <div className="h-20 flex items-center justify-center border-b border-gray-100">
           <NavLink to="/" className="cursor-pointer">
@@ -595,13 +563,10 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         </div>
       </div>
 
-      {/* =========================================
-          RIGHT AREA: MAIN CONTENT 
-      ========================================= */}
-      {/* Added pb-16 on mobile to make room for the new bottom nav bar */}
+      {/* MAIN CONTENT AREA */}
       <div className="flex-1 overflow-hidden bg-slate-50 relative flex flex-col pb-16 md:pb-0">
         
-        {/* 🌌 DYNAMIC DEEP SPACE HEADER */}
+        {/* DYNAMIC HEADER */}
         <div className="h-48 md:h-56 bg-slate-900 absolute top-0 left-0 w-full rounded-b-[3rem] shadow-inner overflow-hidden z-0">
           <div className="absolute top-0 right-0 md:right-32 w-96 h-96 bg-brand-orange opacity-10 rounded-full blur-[80px] animate-nebula-drift" style={{ animationDelay: '0s' }}></div>
           <div className="absolute bottom-0 left-10 md:left-48 w-96 h-96 bg-brand-blue opacity-[0.15] rounded-full blur-[80px] animate-nebula-drift" style={{ animationDelay: '-20s', animationDirection: 'reverse' }}></div>
@@ -615,50 +580,19 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
           </div>
 
           <style>{`
-            @keyframes star-pan {
-              0% { background-position: 0px 0px; }
-              100% { background-position: -500px 200px; }
-            }
-            .animate-star-pan {
-              animation: star-pan 150s linear infinite;
-            }
-
-            @keyframes nebula-drift {
-              0% { transform: translate(0, 0) scale(1); opacity: 0.08; }
-              33% { transform: translate(40px, -40px) scale(1.1); opacity: 0.12; }
-              66% { transform: translate(-30px, 30px) scale(0.95); opacity: 0.05; }
-              100% { transform: translate(0, 0) scale(1); opacity: 0.08; }
-            }
-            .animate-nebula-drift {
-              animation: nebula-drift 45s ease-in-out infinite;
-            }
-
-            @keyframes space-wander {
-              0%   { transform: translate(5vw, 20px) rotate(15deg); }
-              20%  { transform: translate(30vw, 80px) rotate(35deg); }
-              40%  { transform: translate(65vw, 10px) rotate(5deg); }
-              60%  { transform: translate(85vw, 90px) rotate(-15deg); }
-              80%  { transform: translate(40vw, 50px) rotate(-5deg); }
-              100% { transform: translate(5vw, 20px) rotate(15deg); }
-            }
-            .animate-space-wander {
-              animation: space-wander 60s ease-in-out infinite;
-            }
-
-            @keyframes thruster {
-              0%, 100% { transform: scale(1); opacity: 0.2; }
-              50% { transform: scale(1.1); opacity: 0.4; }
-            }
-            .animate-thruster {
-              animation: thruster 4s ease-in-out infinite;
-            }
+            @keyframes star-pan { 0% { background-position: 0px 0px; } 100% { background-position: -500px 200px; } }
+            .animate-star-pan { animation: star-pan 150s linear infinite; }
+            @keyframes nebula-drift { 0% { transform: translate(0, 0) scale(1); opacity: 0.08; } 33% { transform: translate(40px, -40px) scale(1.1); opacity: 0.12; } 66% { transform: translate(-30px, 30px) scale(0.95); opacity: 0.05; } 100% { transform: translate(0, 0) scale(1); opacity: 0.08; } }
+            .animate-nebula-drift { animation: nebula-drift 45s ease-in-out infinite; }
+            @keyframes space-wander { 0% { transform: translate(5vw, 20px) rotate(15deg); } 20% { transform: translate(30vw, 80px) rotate(35deg); } 40% { transform: translate(65vw, 10px) rotate(5deg); } 60% { transform: translate(85vw, 90px) rotate(-15deg); } 80% { transform: translate(40vw, 50px) rotate(-5deg); } 100% { transform: translate(5vw, 20px) rotate(15deg); } }
+            .animate-space-wander { animation: space-wander 60s ease-in-out infinite; }
+            @keyframes thruster { 0%, 100% { transform: scale(1); opacity: 0.2; } 50% { transform: scale(1.1); opacity: 0.4; } }
+            .animate-thruster { animation: thruster 4s ease-in-out infinite; }
           `}</style>
         </div>
 
-        {/* TOP BAR (Hamburger + Mobile Date) */}
+        {/* TOP BAR */}
         <div className="absolute top-4 md:top-6 left-4 right-4 md:left-1/2 md:right-auto md:-translate-x-1/2 z-90 flex items-center justify-between md:justify-center">
-          
-          {/* 🚨 NEW: Mobile Top-Left Hamburger Menu */}
           <button 
             onClick={() => setIsSidebarOpen(true)}
             className="md:hidden w-10 h-10 flex items-center justify-center bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg hover:bg-white/20 active:scale-95 transition-all"
@@ -666,21 +600,14 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
             <Menu size={20} strokeWidth={2.5} />
           </button>
 
-          {/* Mobile Date Pill */}
           <div className="md:hidden flex items-center bg-white/10 backdrop-blur-md border border-white/20 px-4 py-1.5 rounded-full shadow-lg">
-            <span className="text-[11px] font-bold tracking-wider text-white/90 drop-shadow-sm uppercase">
-              {todayDate}
-            </span>
+            <span className="text-[11px] font-bold tracking-wider text-white/90 drop-shadow-sm uppercase">{todayDate}</span>
           </div>
 
-          {/* Invisible spacer to keep the Date perfectly centered on mobile */}
           <div className="w-10 md:hidden pointer-events-none"></div>
 
-          {/* Desktop Date & Notif Pill (Unchanged) */}
           <div className="hidden md:flex items-center gap-4 bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/20 px-6 py-2.5 rounded-full shadow-lg transition-all duration-300">
-            <span className="text-sm font-medium text-white/90 tracking-wide drop-shadow-sm whitespace-nowrap">
-              {todayDate}
-            </span>
+            <span className="text-sm font-medium text-white/90 tracking-wide drop-shadow-sm whitespace-nowrap">{todayDate}</span>
             <div className="w-px h-5 bg-white/30 rounded-full"></div>
             <button onClick={(e) => { e.stopPropagation(); setShowNotifications(!showNotifications); }} className="relative text-white hover:text-brand-orange hover:scale-110 transition-all" title="Notifications">
               <Bell size={20} className={unreadCount > 0 ? "animate-wiggle" : ""} />
@@ -701,34 +628,24 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
           </div>
         </div>
         
-        {/* MAIN CONTENT AREA */}
         <div className="relative z-0 px-0 pt-16 pb-0 md:p-8 max-w-7xl mx-auto w-full mt-2 md:mt-8 flex-1 flex flex-col min-h-0">
           
           {isPremiumTeacher && ["syllabus", "my-courses"].includes(currentView) && (
             <div className="mb-6 mx-4 md:mx-0 bg-white px-6 py-4 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-4 overflow-x-auto custom-scrollbar shrink-0">
               <span className="text-sm font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">Viewing:</span>
-              
               <div className="flex items-center gap-2">
-                
-                {/* 1. Class Insights (Only relevant for Syllabus View) */}
                 {currentView === "syllabus" && (
                   <button onClick={() => setSelectedStudentUsername(null)} className={`flex items-center gap-2 px-4 py-2 rounded-full border transition whitespace-nowrap ${selectedStudentUsername === null ? 'border-brand-orange text-brand-orange bg-orange-50 font-bold' : 'border-gray-200 text-gray-500 font-medium hover:border-brand-orange hover:bg-orange-50/50'}`}>
                     <Zap size={16} /> Class Insights
                   </button>
                 )}
-
-                {/* 2. Teacher's Own View (Me) */}
                 <button 
                   onClick={() => setSelectedStudentUsername(localStorage.getItem("Username") || localStorage.getItem("username"))} 
                   className={`flex items-center gap-2 px-4 py-2 rounded-full border transition whitespace-nowrap ${(selectedStudentUsername === (localStorage.getItem("Username") || localStorage.getItem("username"))) ? 'border-slate-900 text-slate-900 bg-slate-100 font-bold' : 'border-gray-200 text-gray-500 font-medium hover:border-slate-900 hover:bg-slate-50'}`}
                 >
                   <UserCircle size={16} /> My {currentView === 'syllabus' ? 'Syllabus' : 'Courses'}
                 </button>
-
-                {/* Vertical Divider */}
                 <div className="w-px h-6 bg-gray-200 mx-2 shrink-0" />
-
-                {/* 3. Students List */}
                 {teacherStudents.length === 0 ? (
                   <span className="text-sm text-gray-400 italic px-2 whitespace-nowrap">No students in roster</span>
                 ) : (
@@ -744,15 +661,11 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
                     );
                   })
                 )}
-
-                {/* 🚨 NEW: 4. Add Student Button */}
                 <div className="w-px h-6 bg-gray-200 mx-1 shrink-0" />
                 <button 
                   onClick={() => {
-                    // Update state to render the StudentManagement component
                     setCurrentView("management");
                     setActiveTab("Management");
-                    // Save to local storage so it persists on refresh
                     localStorage.setItem("currentView", "management");
                     localStorage.setItem("activeTab", "Management");
                   }}
@@ -762,42 +675,41 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
                   <Plus size={16} />
                   <span className="text-sm font-bold">Add Student</span>
                 </button>
-
               </div>
             </div>
           )}
         
-
           <div className={`relative flex-1 min-h-0 flex flex-col bg-white transition-all duration-300
-              rounded-t-4xl md:rounded-4xl 
-              border-t md:border border-gray-100 border-x-0 md:border-x
+              rounded-t-4xl md:rounded-4xl border-t md:border border-gray-100 border-x-0 md:border-x
               shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] md:shadow-xl
               ${(currentView === "report" || currentView === "whatsapp-crm" || currentView === "schedule") 
-                  ? "p-0 overflow-hidden" 
-                  : "pt-4 px-4 md:pt-6 md:px-6 overflow-y-auto dashboard-content-scroll"}
+                  ? "p-0 overflow-hidden" : "pt-4 px-4 md:pt-6 md:px-6 overflow-y-auto dashboard-content-scroll"}
           `}>
             <div className={`relative w-full ${(currentView === "report" || currentView === "whatsapp-crm" || currentView === "schedule") 
-              ? "h-full" 
-              : "min-h-full pb-8 md:pb-10"} rounded-lg
+              ? "h-full" : "min-h-full pb-8 md:pb-10"} rounded-lg
             `}>
               <Suspense fallback={
                 <div className="flex justify-center items-center h-64">
                   <Loader2 className="w-10 h-10 animate-spin text-brand-orange" />
                 </div>
               }>
-                {/* COMPONENT RENDERING ROUTER */}
+                {/* 🚨 COMPONENT RENDERING ROUTER */}
                 {currentView === "Overview" && (
                   isOverviewLoading ? (
                     <div className="flex justify-center items-center h-64">
                       <Loader2 className="w-10 h-10 animate-spin text-brand-orange" />
                     </div>
-                  ) : (
-                    <Overview user={userData} data={overviewStats} />
-                  )
+                  ) : <Overview user={userData} data={overviewStats} />
                 )}
                 {currentView === "profile" && <Profile />}
                 {currentView === "schedule" && <Calendar role={userData.Role || "student"} currentUserId={userData._id} />}
                 {currentView === "settings" && <SettingsPanel userData={userData} setUserData={setUserData} />}
+                
+                {/* 🚨 MOUNTED INTEGRATIONS */}
+                {currentView === "integrations" && (!isStudent || hasAdminOverride) && (
+                  <SocialIntegrations userData={userData} />
+                )}
+
                 {currentView === "saved-posts" && <SavedPosts />}
                 {currentView === "my-posts" && <MyPosts preloadedPosts={cachedMyPosts} onPostsUpdate={setCachedMyPosts} />}
                 {currentView === "counselor-schedule" && isCounselor && <CounselorSchedule />}
@@ -847,45 +759,25 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
                   )
                 )}
               </Suspense>
-              
-
             </div>
           </div>
         </div>
       </div>
 
-      {/* =========================================
-          📱 DASHBOARD NAVBAR (Focus Context)
-      ========================================= */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white flex items-center z-1000 pb-safe 
-        shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)] border-t border-gray-100">
-        
-        {/* ESCAPE HATCH TO SOCIAL FEED */}
-        <button 
-          onClick={() => navigate("/")} 
-          className="flex flex-col items-center justify-center flex-1 h-full text-gray-400 hover:text-brand-orange transition-colors"
-        >
+      {/* MOBILE NAVBAR */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white flex items-center z-1000 pb-safe shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)] border-t border-gray-100">
+        <button onClick={() => navigate("/")} className="flex flex-col items-center justify-center flex-1 h-full text-gray-400 hover:text-brand-orange transition-colors">
           <Home size={24} strokeWidth={2} />
           <span className="text-[10px] font-bold mt-1">Home</span>
         </button>
-
-        {/* ALERTS */}
-        <button 
-          onClick={(e) => { e.stopPropagation(); setShowNotifications(!showNotifications); }}
-          className="flex flex-col items-center justify-center flex-1 h-full text-gray-400 hover:text-brand-orange transition-colors"
-        >
+        <button onClick={(e) => { e.stopPropagation(); setShowNotifications(!showNotifications); }} className="flex flex-col items-center justify-center flex-1 h-full text-gray-400 hover:text-brand-orange transition-colors">
           <div className="relative">
             <Bell size={24} strokeWidth={2} className={unreadCount > 0 ? "text-brand-orange" : ""} />
             {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-brand-orange text-white text-[9px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-white">{unreadCount > 9 ? "9+" : unreadCount}</span>}
           </div>
           <span className="text-[10px] font-bold mt-1">Alerts</span>
         </button>
-
-        {/* PROFILE */}
-        <button 
-          onClick={(e) => { e.stopPropagation(); setShowProfile(!showProfile); }}
-          className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${showProfile ? "text-brand-orange" : "text-gray-400 hover:text-brand-orange"}`}
-        >
+        <button onClick={(e) => { e.stopPropagation(); setShowProfile(!showProfile); }} className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${showProfile ? "text-brand-orange" : "text-gray-400 hover:text-brand-orange"}`}>
           <div className={`w-6 h-6 rounded-full flex items-center justify-center overflow-hidden border-[1.5px] ${showProfile ? "border-brand-orange" : "border-transparent"}`}>
             {userData?.Photo ? <img src={optimizeImage(userData.Photo)} alt="Profile" className="w-full h-full object-cover" /> : <User size={20} strokeWidth={2} className={showProfile ? "text-brand-orange" : "text-gray-400"} />}
           </div>
@@ -893,35 +785,24 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
         </button>
       </div>
 
-      
-
-      {/* =========================================
-          MODALS & ALERTS
-      ========================================= */}
+      {/* MODALS & ALERTS */}
       {showUnlockModal && (
         <div className="fixed inset-0 z-999 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white rounded-4xl p-8 max-w-sm w-full text-center shadow-2xl relative animate-in zoom-in duration-200">
             <button onClick={() => setShowUnlockModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition">✕</button>
-            
             <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${isUnverifiedParent ? 'bg-rose-50' : 'bg-blue-50'}`}>
               {isUnverifiedParent ? <ShieldAlert className="text-rose-500 w-8 h-8" /> : <Lock className="text-brand-blue w-8 h-8" />}
             </div>
-            
             <h3 className="text-xl font-black text-slate-800 mb-2">
               {isUnverifiedParent ? "Verify Your Account" : "Unlock Academy"}
             </h3>
-            
             <p className="text-sm text-slate-500 mb-6 font-medium">
               {isUnverifiedParent 
                 ? "Protecting our community is our top priority. Request verification to unlock direct messaging with our Verified Educators."
                 : "Are you an official educator at Cute Learning? Request admin approval to access student management and syllabus tools."}
             </p>
-            
             {(() => {
-              const isPending = isUnverifiedParent 
-                ? userData.parentVerificationRequested 
-                : userData.staffApprovalRequested;
-
+              const isPending = isUnverifiedParent ? userData.parentVerificationRequested : userData.staffApprovalRequested;
               return (
                 <button 
                   onClick={handleRequestApproval}
@@ -935,73 +816,33 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
                   }`}
                 >
                   {isRequesting ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-5 h-5 animate-spin" /> SENDING...
-                    </span>
-                  ) : isPending ? (
-                    "REQUEST PENDING"
-                  ) : isUnverifiedParent ? (
-                    "REQUEST VERIFICATION"
-                  ) : (
-                    "REQUEST APPROVAL"
-                  )}
+                    <span className="flex items-center justify-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> SENDING...</span>
+                  ) : isPending ? "REQUEST PENDING" : isUnverifiedParent ? "REQUEST VERIFICATION" : "REQUEST APPROVAL"}
                 </button>
               );
             })()}
           </div>
         </div>
       )}
-
       
-      {/* 🚨 YOUR NAVPROFILE COMPONENT */}
-      <Navprofile 
-        setShowProfile={setShowProfile} 
-        showProfile={showProfile} 
-        closeNavProfile={() => setShowProfile(false)} 
-        userData={userData} 
-        setUserData={setUserData} 
-      />
+      <Navprofile setShowProfile={setShowProfile} showProfile={showProfile} closeNavProfile={() => setShowProfile(false)} userData={userData} setUserData={setUserData} />
 
-      {/* =========================================
-          📱 MOBILE ONLY: SLIDE-OVER SIDEBAR
-      ========================================= */}
+      {/* MOBILE SLIDE-OVER SIDEBAR */}
       <AnimatePresence>
         {isSidebarOpen && (
           <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSidebarOpen(false)}
-              className="md:hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-2000" 
-            />
-
-            {/* Sidebar Drawer */}
-            <motion.div
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 250 }}
-              className="md:hidden fixed top-0 left-0 bottom-0 w-[80%] max-w-75 bg-white z-2100 shadow-2xl flex flex-col"
-            >
-              {/* Header (Logo + Close Button) */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSidebarOpen(false)} className="md:hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-2000" />
+            <motion.div initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", damping: 25, stiffness: 250 }} className="md:hidden fixed top-0 left-0 bottom-0 w-[80%] max-w-75 bg-white z-2100 shadow-2xl flex flex-col">
               <div className="h-16 flex items-center justify-center border-b border-gray-100 relative shrink-0">
                 <img src="/logo.svg" alt="CuTe Learning" className="w-22 drop-shadow-md" draggable="false" />
               </div>
-
-              {/* Profile Overview (Mimics Desktop exactly) */}
               <div className="flex flex-col items-center py-6 border-b border-gray-100 relative shrink-0">
                 <div className="w-20 h-20 rounded-full border-4 border-white shadow-md overflow-hidden bg-brand-orange text-white flex items-center justify-center text-2xl font-bold">
                   {userData.Photo ? <img src={optimizeImage(userData.Photo)} alt="Profile" className="w-full h-full object-cover" /> : (userData.Name?.charAt(0).toUpperCase() || "U")}
                 </div>
                 <h2 className="mt-4 text-lg font-display font-bold text-brand-blue">Hi, {userData.Name ? userData.Name.split(' ')[0] : "Explorer"}!</h2>
-                <p className="text-[10px] font-bold uppercase tracking-wider mt-1 text-gray-400">
-                  {userData.Role || "User"}
-                </p>
+                <p className="text-[10px] font-bold uppercase tracking-wider mt-1 text-gray-400">{userData.Role || "User"}</p>
               </div>
-
-              {/* 🚨 THE MAGIC: Calls the exact same List items as Desktop! */}
               <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col pt-2 pb-6">
                 {getDrawerContent} 
               </div>

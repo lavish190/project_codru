@@ -10,7 +10,7 @@ interface MyPostsProps {
   preloadedPosts?: any[] | null;
   isOwner?: boolean;
   isPublicProfile?: boolean; 
-  onPostsUpdate?: (posts: any[]) => void; // 🚨 CACHING: Syncs data back to Dashboard
+  onPostsUpdate?: (posts: any[]) => void; 
 }
 
 const toLocalDatetimeInput = (dateString: string) => {
@@ -31,11 +31,12 @@ const formatDate = (dateString: string, includeTime: boolean = false) => {
 const MyPosts = ({ 
   preloadedPosts, 
   isOwner = true, 
-  isPublicProfile = !!preloadedPosts && !isOwner, // Ensure Dashboard cache doesn't trigger Public logic
+  isPublicProfile = !!preloadedPosts && !isOwner, 
   onPostsUpdate 
 }: MyPostsProps) => {
   const [posts, setPosts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
   const navigate = useNavigate();
   const currentUserId = localStorage.getItem("userId");
 
@@ -58,39 +59,46 @@ const MyPosts = ({
   const [editSyncTimes, setEditSyncTimes] = useState(true);
   const [editLinkedinSchedule, setEditLinkedinSchedule] = useState("");
 
+  const isLoggedIn = !!localStorage.getItem("jwtoken");
+
   useEffect(() => {
     if (currentUserId) {
       setLocalDraft(localStorage.getItem(`cute_post_draft_${currentUserId}`));
       setLocalDraftSchedule(localStorage.getItem(`cute_post_schedule_draft_${currentUserId}`));
     }
 
-    // 🚨 SMART CACHE CHECK: If we have preloaded data, use it instantly
-    if (preloadedPosts !== undefined && preloadedPosts !== null) {
-      setPosts(preloadedPosts);
-      setIsLoading(false);
-    } else {
-      // 🚨 Otherwise, fetch from the server and update the cache!
-      const fetchDashboardPosts = async () => {
-        try {
-          const token = localStorage.getItem("jwtoken");
-          const res = await fetch(`${import.meta.env.VITE_API}my-posts`, {
-            headers: { "Authorization": `Bearer ${token}` }
-          });
+    const fetchInitialData = async () => {
+      const token = localStorage.getItem("jwtoken");
+      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+
+      try {
+        // Fetch saved posts for the Smart Card to know default state
+        if (isLoggedIn) {
+          const savedRes = await fetch(`${import.meta.env.VITE_API}saved-posts/ids`, { headers });
+          if (savedRes.ok) setSavedPostIds(await savedRes.json());
+        }
+
+        // Fetch Posts if not preloaded
+        if (preloadedPosts !== undefined && preloadedPosts !== null) {
+          setPosts(preloadedPosts);
+        } else {
+          const res = await fetch(`${import.meta.env.VITE_API}my-posts`, { headers });
           if (res.ok) {
             const data = await res.json();
             const finalData = Array.isArray(data) ? data : (data.posts || data.blogs || []);
             setPosts(finalData);
-            if (onPostsUpdate) onPostsUpdate(finalData); // Save to Dashboard memory
+            if (onPostsUpdate) onPostsUpdate(finalData);
           }
-        } catch (error) {
-          console.error("Dashboard error:", error);
-        } finally {
-          setIsLoading(false);
         }
-      };
-      fetchDashboardPosts();
-    }
-  }, [currentUserId]); 
+      } catch (error) {
+        console.error("Dashboard error:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInitialData();
+  }, [currentUserId, preloadedPosts, isLoggedIn]); 
 
   const publishedPosts = posts.filter(p => p.status !== "scheduled");
   const scheduledPosts = posts.filter(p => p.status === "scheduled");
@@ -107,13 +115,36 @@ const MyPosts = ({
   }, [viewMode, startPostId]);
 
   // ==========================================
-  // ACTIONS
+  // 🚨 PARENT ACTIONS (Passed to PostCard)
   // ==========================================
+  
+  const handleDeletePost = (postId: string) => {
+    setPostToDelete(postId); // Opens the confirmation modal
+  };
+
+  const handleEditClick = (post: any) => {
+    setEditContent(post.content); 
+    
+    const cuteTime = post.distribution?.cute?.scheduledFor;
+    const liTime = post.distribution?.linkedin?.scheduledFor;
+    const isLiActive = post.distribution?.linkedin?.status && post.distribution?.linkedin?.status !== 'unselected';
+
+    setEditSchedule(cuteTime ? toLocalDatetimeInput(cuteTime) : "");
+    setEditLinkedinSchedule(liTime ? toLocalDatetimeInput(liTime) : "");
+    setEditPostToLinkedIn(!!isLiActive);
+    setEditSyncTimes(!liTime || cuteTime === liTime); 
+    
+    setPostToEdit(post); // Opens the edit modal
+  };
+
+  // ==========================================
+  // MODAL SUBMISSIONS (Talks to Backend)
+  // ==========================================
+  
   const confirmDelete = async () => {
     if (!postToDelete) return;
     const originalPosts = [...posts];
     
-    // 🚨 Optimistic UI + Cache Sync
     const updatedPosts = posts.filter(p => p._id !== postToDelete);
     setPosts(updatedPosts);
     if (onPostsUpdate) onPostsUpdate(updatedPosts); 
@@ -126,7 +157,6 @@ const MyPosts = ({
       if (!res.ok) throw new Error("Failed to delete");
     } catch (error: any) {
       setErrorMsg("Failed to delete post. Please try again.");
-      // Rollback on failure
       setPosts(originalPosts); 
       if (onPostsUpdate) onPostsUpdate(originalPosts); 
     }
@@ -157,19 +187,15 @@ const MyPosts = ({
           content: editContent,
           scheduledFor: editSchedule ? new Date(editSchedule).toISOString() : null,
           status: editSchedule && new Date(editSchedule) > new Date() ? "scheduled" : "published",
-          distribution // Send the new payload
+          distribution
         })
       });
-
       
       if (res.ok) {
         const updatedPost = await res.json();
-        
-        // Optimistic UI + Cache Sync
         const newPosts = posts.map(p => p._id === postToEdit._id ? updatedPost : p);
         setPosts(newPosts);
         if (onPostsUpdate) onPostsUpdate(newPosts);
-        
         setPostToEdit(null); 
       } else throw new Error("Failed to update post");
     } catch (error: any) { setErrorMsg("Failed to update post."); }
@@ -217,7 +243,7 @@ const MyPosts = ({
         )
       )}
 
-      {/* 🚨 GRID VIEW */}
+      {/* GRID VIEW */}
       {viewMode === "grid" && (activeTab === "published" || activeTab === "scheduled") && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 animate-in fade-in duration-300">
           {(activeTab === "published" ? publishedPosts : scheduledPosts).map((post: any) => (
@@ -239,27 +265,13 @@ const MyPosts = ({
                     <Eye size={16} />
                   </button>
                   <button 
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      setEditContent(post.content); 
-                      
-                      const cuteTime = post.distribution?.cute?.scheduledFor;
-                      const liTime = post.distribution?.linkedin?.scheduledFor;
-                      const isLiActive = post.distribution?.linkedin?.status && post.distribution?.linkedin?.status !== 'unselected';
-
-                      setEditSchedule(cuteTime ? toLocalDatetimeInput(cuteTime) : "");
-                      setEditLinkedinSchedule(liTime ? toLocalDatetimeInput(liTime) : "");
-                      setEditPostToLinkedIn(!!isLiActive);
-                      setEditSyncTimes(!liTime || cuteTime === liTime); 
-                      
-                      setPostToEdit(post); 
-                    }} 
+                    onClick={(e) => { e.stopPropagation(); handleEditClick(post); }} 
                     className="p-2 bg-white/95 backdrop-blur-md hover:bg-white text-gray-700 hover:text-brand-blue rounded-full shadow-md transition transform hover:scale-105 active:scale-95" 
                     title="Edit Post"
                   >
                     <Edit3 size={16} />
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); setPostToDelete(post._id); }} className="p-2 bg-white/95 backdrop-blur-md hover:bg-white text-gray-700 hover:text-red-500 rounded-full shadow-md transition transform hover:scale-105 active:scale-95" title="Delete Post">
+                  <button onClick={(e) => { e.stopPropagation(); handleDeletePost(post._id); }} className="p-2 bg-white/95 backdrop-blur-md hover:bg-white text-gray-700 hover:text-red-500 rounded-full shadow-md transition transform hover:scale-105 active:scale-95" title="Delete Post">
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -297,7 +309,7 @@ const MyPosts = ({
         </div>
       )}
 
-      {/* 🚨 FEED VIEW (Instagram Style Scroll - Only reachable from Public Profile) */}
+      {/* FEED VIEW (Instagram Style Scroll - Only reachable from Public Profile) */}
       {viewMode === "feed" && isPublicProfile && (
         <div className="animate-in slide-in-from-bottom-4 duration-300">
           
@@ -320,16 +332,13 @@ const MyPosts = ({
                 id={`feed-post-${post._id}`} 
                 className="scroll-mt-32"
               >
+                {/* 🚨 SMART POSTCARD DEPLOYED */}
                 <PostCard 
                   post={post} 
-                  currentUser={{ id: currentUserId }}
-                  isSingleView={false}
-                  onLike={() => {}}
-                  onSave={() => {}}
-                  onFollow={() => {}}
-                  onCommentSubmit={() => {}}
-                  savedPostIds={[]}
-                  followingUsernames={[]}
+                  defaultIsSaved={savedPostIds.includes(post._id)} 
+                  followingUsernames={[post.userId?.username]}
+                  onDelete={handleDeletePost} 
+                  onEdit={handleEditClick}    
                 />
               </div>
             ))}
@@ -337,7 +346,7 @@ const MyPosts = ({
         </div>
       )}
 
-      {/* 🚨 RESTORED DELETE CONFIRMATION MODAL - BOOSTED Z-INDEX */}
+      {/* DELETE CONFIRMATION MODAL */}
       {postToDelete && (
         <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToDelete(null)}>
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center" onClick={e => e.stopPropagation()}>
@@ -354,7 +363,7 @@ const MyPosts = ({
         </div>
       )}
 
-      {/* PREVIEW MODAL - BOOSTED Z-INDEX */}
+      {/* PREVIEW MODAL */}
       {postToPreview && (
         <div className="fixed inset-0 z-[1050] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToPreview(null)}>
           <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[95dvh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -376,7 +385,7 @@ const MyPosts = ({
         </div>
       )}
 
-      {/* RICH TEXT EDIT MODAL - BOOSTED Z-INDEX */}
+      {/* RICH TEXT EDIT MODAL */}
       {postToEdit && (
         <div className="fixed inset-0 z-[1050] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToEdit(null)}>
           <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[95dvh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>

@@ -6,32 +6,163 @@ import CommentItem from "./CommentItem";
 import { optimizeImage } from "../utils/image";
 
 export default function PostCard({ 
-  post, 
-  currentUser,
+  post: initialPost, 
   isSingleView = false,
-  onLike, 
-  onSave, 
   onDelete, 
-  onEdit, // 🚨 Added onEdit prop
-  onFollow,
-  savedPostIds = [],
-  followingUsernames = [],
-  onCommentSubmit,
-  onCommentVote,
-  onCommentReply,
-  onCommentDelete
+  onEdit,   
+  defaultIsSaved = false, 
+  followingUsernames = [] 
 }: any) {
   const navigate = useNavigate();
-  const [showMenu, setShowMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null); // 🚨 Ref for outside click detection
+  
+  // 🚨 SMART STATE
+  const [localPost, setLocalPost] = useState(initialPost);
+  const [isSavedByMe, setIsSavedByMe] = useState(defaultIsSaved);
+  
+  // 🚨 FOLLOW STATE
+  const [isFollowing, setIsFollowing] = useState(followingUsernames.includes(initialPost?.userId?.username));
+  
+  const currentUserId = localStorage.getItem("userId");
+  const currentUsername = localStorage.getItem("Username");
+  const isLoggedIn = !!localStorage.getItem("jwtoken");
 
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showComments, setShowComments] = useState(isSingleView);
   const [commentText, setCommentText] = useState("");
 
-  const isLikedByMe = post.likedBy?.some((u: any) => (u._id || u) === currentUser?.id);
-  const isSavedByMe = savedPostIds.includes(post._id);
-  const isMyPost = post.userId?._id === currentUser?.id;
+  const isLikedByMe = localPost.likedBy?.some((u: any) => (u._id || u) === currentUserId);
+  const isMyPost = localPost.userId?._id === currentUserId;
+
+  useEffect(() => { setLocalPost(initialPost); }, [initialPost]);
+  useEffect(() => { setIsSavedByMe(defaultIsSaved); }, [defaultIsSaved]);
+  useEffect(() => { setIsFollowing(followingUsernames.includes(initialPost?.userId?.username)); }, [followingUsernames, initialPost]);
+
+  // 🚨 SMART API FUNCTIONS
+  const handleLike = async () => {
+    if (!isLoggedIn) return; 
+
+    setLocalPost((prev: any) => {
+      const isLiked = prev.likedBy?.some((u: any) => (u._id || u) === currentUserId);
+      return {
+        ...prev,
+        likes: isLiked ? Math.max(0, prev.likes - 1) : prev.likes + 1,
+        likedBy: isLiked ? prev.likedBy.filter((u: any) => (u._id || u) !== currentUserId) : [...(prev.likedBy || []), currentUserId]
+      };
+    });
+
+    try {
+      const token = localStorage.getItem("jwtoken");
+      await fetch(`${import.meta.env.VITE_API}posts/${localPost._id}/like`, { method: "POST", headers: { "Authorization": `Bearer ${token}` } });
+    } catch (error) {
+      console.error("Failed to like", error);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!isLoggedIn) return;
+    setIsSavedByMe(!isSavedByMe); 
+    try {
+      const token = localStorage.getItem("jwtoken");
+      await fetch(`${import.meta.env.VITE_API}posts/${localPost._id}/save`, { method: "POST", headers: { "Authorization": `Bearer ${token}` } });
+    } catch (error) {
+      console.error("Failed to save", error);
+    }
+  };
+
+  // 🚨 NEW: Smart Follow Handler
+  const handleFollow = async () => {
+    if (!isLoggedIn) return;
+    setIsFollowing(true); // Optimistic UI update
+    
+    try {
+      const token = localStorage.getItem("jwtoken");
+      const res = await fetch(`${import.meta.env.VITE_API}follow`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ currentUserId: currentUsername, targetUserId: localPost.userId?.username })
+      });
+      if (!res.ok) throw new Error("Failed to follow");
+    } catch (error) {
+      setIsFollowing(false); // Rollback on fail
+      console.error("Failed to follow user", error);
+    }
+  };
+
+  const handleCommentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentText.trim() || !isLoggedIn) return;
+
+    try {
+      const token = localStorage.getItem("jwtoken");
+      const res = await fetch(`${import.meta.env.VITE_API}posts/${localPost._id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ text: commentText })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLocalPost({ ...localPost, comments: data.comments }); 
+        setCommentText("");
+      }
+    } catch (error) {
+      console.error("Failed to comment", error);
+    }
+  };
+
+  const handleCommentVote = async (postId: string, commentId: string) => {
+    if (!isLoggedIn) return;
+    try {
+      const token = localStorage.getItem("jwtoken");
+      const res = await fetch(`${import.meta.env.VITE_API}posts/${postId}/comments/${commentId}/like`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLocalPost({ ...localPost, comments: data.comments });
+      }
+    } catch (error) {
+      console.error("Failed to vote on comment", error);
+    }
+  };
+
+  const handleCommentReply = async (postId: string, parentId: string, text: string) => {
+    if (!text.trim() || !isLoggedIn) return;
+    try {
+      const token = localStorage.getItem("jwtoken");
+      const res = await fetch(`${import.meta.env.VITE_API}posts/${postId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ text, parentId })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLocalPost({ ...localPost, comments: data.comments });
+      }
+    } catch (error) {
+      console.error("Failed to reply to comment", error);
+    }
+  };
+
+  const handleCommentDelete = async (postId: string, commentId: string) => {
+    if (!window.confirm("Delete this comment?")) return;
+    try {
+      const token = localStorage.getItem("jwtoken");
+      const res = await fetch(`${import.meta.env.VITE_API}posts/${postId}/comments/${commentId}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLocalPost({ ...localPost, comments: data.comments });
+      }
+    } catch (error) {
+      console.error("Failed to delete comment", error);
+    }
+  };
+
   const timeAgo = (dateString: string) => {
     if (!dateString) return "";
     const date = new Date(dateString);
@@ -39,38 +170,28 @@ export default function PostCard({
     const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
     
     if (seconds < 60) return "Just now";
-    
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m`;
-    
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h`;
-    
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days}d`;
-    
     const weeks = Math.floor(days / 7);
     if (weeks < 52) return `${weeks}w`;
-    
     const years = Math.floor(weeks / 52);
     return `${years}y`;
   };
 
-  const images = post.images?.length > 0 ? post.images : (post.imageUrl ? [post.imageUrl] : []);
+  const images = localPost.images?.length > 0 ? localPost.images : (localPost.imageUrl ? [localPost.imageUrl] : []);
 
-  // 🚨 Handle clicking outside the 3-dot menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowMenu(false);
       }
     };
-    if (showMenu) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    if (showMenu) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showMenu]);
 
   return (
@@ -79,21 +200,22 @@ export default function PostCard({
       {/* 1. Header */}
       <div className="flex items-center justify-between p-3 sm:p-4">
         <div className="flex items-center gap-3">
-          <Link to={`/profile/${post.userId?.username}`} className="w-10 h-10 rounded-full overflow-hidden border border-gray-100 shrink-0">
-            {post.userId?.photo ? <img src={optimizeImage(post.userId.photo)} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-brand-orange text-white flex items-center justify-center font-bold">{post.userId?.name?.charAt(0)}</div>}
+          <Link to={`/profile/${localPost.userId?.username}`} className="w-10 h-10 rounded-full overflow-hidden border border-gray-100 shrink-0">
+            {localPost.userId?.photo ? <img src={optimizeImage(localPost.userId.photo)} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-brand-orange text-white flex items-center justify-center font-bold">{localPost.userId?.name?.charAt(0)}</div>}
           </Link>
           <div className="leading-tight">
-            <Link to={`/profile/${post.userId?.username}`} className="font-bold text-gray-900 text-sm hover:underline">{post.userId?.name}</Link>
+            <Link to={`/profile/${localPost.userId?.username}`} className="font-bold text-gray-900 text-sm hover:underline">{localPost.userId?.name}</Link>
             <div className="flex items-center text-xs text-gray-500 gap-1">
-              <span>@{post.userId?.username}</span>
-              <span>{timeAgo(post.createdAt)}</span>
+              <span>@{localPost.userId?.username}</span>
+              <span>{timeAgo(localPost.createdAt)}</span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {!isMyPost && !followingUsernames.includes(post.userId?.username) && (
-             <button onClick={() => onFollow(post.userId?.username)} className="hidden sm:flex items-center gap-1 bg-brand-blue/10 text-brand-blue hover:bg-brand-blue hover:text-white px-3 py-1.5 rounded-full text-xs font-bold transition-colors">
+          {/* 🚨 Updated Follow Button Logic */}
+          {!isMyPost && !isFollowing && (
+             <button onClick={handleFollow} className="hidden sm:flex items-center gap-1 bg-brand-blue/10 text-brand-blue hover:bg-brand-blue hover:text-white px-3 py-1.5 rounded-full text-xs font-bold transition-colors">
                <UserPlus className="w-3.5 h-3.5" /> Follow
              </button>
           )}
@@ -102,29 +224,30 @@ export default function PostCard({
               <button onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }} className="text-gray-400 p-2 rounded-full hover:bg-gray-50"><MoreHorizontal className="w-5 h-5" /></button>
               {showMenu && (
                 <div className="absolute right-0 mt-1 w-36 bg-white rounded-2xl shadow-xl border border-gray-100 py-1 z-20 overflow-hidden">
-                  {/* 🚨 Added Edit Button */}
                   {onEdit && (
                     <button 
                       onClick={(e) => { 
                         e.stopPropagation(); 
                         setShowMenu(false); 
-                        onEdit(post); 
+                        onEdit(localPost); 
                       }} 
                       className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 font-medium"
                     >
                       <Edit2 className="w-4 h-4" /> Edit Post
                     </button>
                   )}
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowMenu(false);
-                      onDelete(post._id);
-                    }} 
-                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 font-medium"
-                  >
-                    <Trash2 className="w-4 h-4" /> Delete Post
-                  </button>
+                  {onDelete && (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowMenu(false);
+                        onDelete(localPost._id);
+                      }} 
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 font-medium"
+                    >
+                      <Trash2 className="w-4 h-4" /> Delete Post
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -134,7 +257,7 @@ export default function PostCard({
 
       {/* 2. Content */}
       <div className="px-3 sm:px-4 pb-2">
-        <PostRenderer content={post.content} />
+        <PostRenderer content={localPost.content} />
       </div>
 
       {/* 3. Media Carousel */}
@@ -161,17 +284,17 @@ export default function PostCard({
       {/* 4. Action Bar */}
       <div className="px-3 sm:px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-5 sm:gap-6">
-          <button onClick={() => onLike(post._id)} className={`flex items-center gap-1.5 transition-colors group ${isLikedByMe ? "text-red-500" : "text-gray-600 hover:text-red-500"}`}>
+          <button onClick={handleLike} className={`flex items-center gap-1.5 transition-colors group ${isLikedByMe ? "text-red-500" : "text-gray-600 hover:text-red-500"}`}>
             <Heart className="w-6 h-6 sm:w-7 sm:h-7 group-active:scale-75 transition-transform" fill={isLikedByMe ? "currentColor" : "none"} strokeWidth={1.5} />
-            <span className="text-sm font-semibold">{post.likes || 0}</span>
+            <span className="text-sm font-semibold">{localPost.likes || 0}</span>
           </button>
           
           <button onClick={() => isSingleView ? document.getElementById("comment-input")?.focus() : setShowComments(!showComments)} className="flex items-center gap-1.5 text-gray-600 hover:text-brand-blue transition-colors group">
             <MessageCircle className="w-6 h-6 sm:w-7 sm:h-7 group-active:scale-75 transition-transform" strokeWidth={1.5} />
-            <span className="text-sm font-semibold">{post.comments?.length || 0}</span>
+            <span className="text-sm font-semibold">{localPost.comments?.length || 0}</span>
           </button>
 
-          <button onClick={() => { navigator.clipboard.writeText(`https://curiousteamlearning.com/post/${post.slug || post._id}.html`); alert("Link copied!");}} className="text-gray-600 hover:text-green-500 transition-colors group">
+          <button onClick={() => { navigator.clipboard.writeText(`https://curiousteamlearning.com/post/${localPost.slug || localPost._id}.html`); alert("Link copied!");}} className="text-gray-600 hover:text-green-500 transition-colors group">
             <Share2 className="w-5 h-5 sm:w-6 sm:h-6 group-active:scale-75 transition-transform" strokeWidth={1.5} />
           </button>
         </div>
@@ -184,7 +307,7 @@ export default function PostCard({
           </div>
         )}
 
-        <button onClick={() => onSave(post._id)} className={`transition-colors group ${isSavedByMe ? "text-brand-orange" : "text-gray-600 hover:text-brand-orange"}`}>
+        <button onClick={handleSave} className={`transition-colors group ${isSavedByMe ? "text-brand-orange" : "text-gray-600 hover:text-brand-orange"}`}>
           <Bookmark className="w-6 h-6 sm:w-7 sm:h-7 group-active:scale-75 transition-transform" fill={isSavedByMe ? "currentColor" : "none"} strokeWidth={1.5} />
         </button>
       </div>
@@ -193,12 +316,40 @@ export default function PostCard({
       {(showComments || isSingleView) && (
         <div className="px-3 sm:px-4 pb-4 bg-slate-50/50 border-t border-gray-50">
           
-          <form onSubmit={(e) => { e.preventDefault(); onCommentSubmit(post._id, commentText); setCommentText(""); }} className="mt-4 flex gap-2 items-center">
-            <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-gray-200 hidden sm:block">
-              {currentUser?.photo ? <img src={optimizeImage(currentUser.photo)} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-brand-orange text-white flex items-center justify-center text-xs font-bold">U</div>}
+          <div className="space-y-4 mt-4 mb-2">
+            {localPost.comments && localPost.comments.length > 0 ? (
+              localPost.comments.map((comment: any) => (
+                <CommentItem 
+                  key={comment._id || Math.random().toString()} 
+                  comment={comment} 
+                  postId={localPost._id}
+                  currentUserId={currentUserId}
+                  onVote={handleCommentVote}
+                  onReply={handleCommentReply}
+                  onDelete={handleCommentDelete}
+                  isSubmitting={{}} 
+                />
+              ))
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-2">No comments yet. Be the first to say something cute!</p>
+            )}
+          </div>
+
+          <form onSubmit={handleCommentSubmit} className="mt-4 flex gap-2 items-center">
+            {/* Guest fallback for avatar */}
+            <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-gray-200 hidden sm:block bg-brand-orange text-white flex items-center justify-center text-xs font-bold">
+              {isLoggedIn ? "U" : "?"}
             </div>
-            <input id="comment-input" type="text" placeholder="Add a cute comment..." value={commentText} onChange={(e) => setCommentText(e.target.value)} className="flex-1 bg-white border border-gray-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50" />
-            <button type="submit" disabled={!commentText.trim()} className="text-brand-blue font-bold text-sm px-2 disabled:opacity-50">Post</button>
+            <input 
+              id="comment-input" 
+              type="text" 
+              placeholder={isLoggedIn ? "Add a cute comment..." : "Log in to comment..."} 
+              value={commentText} 
+              onChange={(e) => setCommentText(e.target.value)} 
+              disabled={!isLoggedIn}
+              className="flex-1 bg-white border border-gray-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50 disabled:bg-gray-50" 
+            />
+            <button type="submit" disabled={!commentText.trim() || !isLoggedIn} className="text-brand-blue font-bold text-sm px-2 disabled:opacity-50">Post</button>
           </form>
         </div>
       )}
