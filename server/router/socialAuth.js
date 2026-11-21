@@ -5,21 +5,25 @@ const SocialConnection = require('../models/SocialConnection');
 const authenticate = require("../middleware/authenticate");
 
 // ==========================================
-// 0. CHECK CONNECTION STATUS (For Frontend UI)
+// 0. CHECK CONNECTION STATUS & GET PAGES
 // ==========================================
 router.get('/auth/connections', authenticate, async (req, res) => {
   try {
     const userId = req.user ? req.user._id : req.userId; 
-    
     const connections = await SocialConnection.find({ userId });
     
-    const status = {
-      linkedin: connections.some(c => c.provider === 'linkedin' && c.accessToken),
-      facebook: connections.some(c => c.provider === 'facebook' && c.accessToken),
-      // substack: connections.some(c => c.provider === 'substack'),
-    };
+    const fbConnection = connections.find(c => c.provider === 'facebook' && c.accessToken);
+    const liConnection = connections.find(c => c.provider === 'linkedin' && c.accessToken);
     
-    res.json(status);
+    res.json({
+      linkedin: !!liConnection,
+      linkedinProfileName: liConnection ? liConnection.profileName : null,
+      
+      facebook: !!fbConnection,
+      facebookProfileName: fbConnection ? fbConnection.profileName : null, // 🚨 FIXED: Now sending the name
+      facebookPages: fbConnection && fbConnection.pages ? fbConnection.pages.map(p => ({ id: p.pageId, name: p.name })) : [],
+      defaultFacebookPageId: fbConnection ? fbConnection.defaultPageId : null
+    });
   } catch (err) {
     console.error("Error fetching connections:", err);
     res.status(500).json({ error: "Server error" });
@@ -140,21 +144,24 @@ router.get('/auth/:provider/callback', async (req, res) => {
       const appId = process.env.FACEBOOK_APP_ID;
       const appSecret = process.env.FACEBOOK_APP_SECRET;
 
-      // STEP A: Exchange the temporary code for a Short-Lived User Token
       const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${redirectUri}&client_secret=${appSecret}&code=${code}`);
       const tokenData = await tokenRes.json();
-      
       if (tokenData.error) throw new Error(tokenData.error.message);
+      
       const shortLivedToken = tokenData.access_token;
 
-      // STEP B: Exchange for a Long-Lived User Token (60 days)
       const longLivedRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${shortLivedToken}`);
       const longLivedData = await longLivedRes.json();
-      
       if (longLivedData.error) throw new Error(longLivedData.error.message);
+      
       const longLivedToken = longLivedData.access_token;
 
-      // STEP C: Fetch the User's Pages (using the long-lived token)
+      // 🚨 NEW: Fetch the user's actual personal name from Facebook
+      const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=name&access_token=${longLivedToken}`);
+      const meData = await meRes.json();
+      const fbUserName = meData.name || "Facebook User";
+
+      // Fetch the User's Pages
       const pagesRes = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${longLivedToken}`);
       const pagesData = await pagesRes.json();
 
@@ -162,19 +169,22 @@ router.get('/auth/:provider/callback', async (req, res) => {
         return res.redirect(`${frontendUrl}/?error=no_facebook_pages_found`);
       }
 
-      // Automatically link the FIRST page they manage
-      const selectedPage = pagesData.data[0]; 
-      const pageAccessToken = selectedPage.access_token;
-      const pageId = selectedPage.id;
-      const pageName = selectedPage.name;
+      const allPages = pagesData.data.map(page => ({
+        pageId: page.id,
+        name: page.name,
+        accessToken: page.access_token
+      }));
 
-      // STEP D: Save the Permanent Page Token to MongoDB
+      const defaultPage = allPages[0];
+
       await SocialConnection.findOneAndUpdate(
         { userId, provider: 'facebook' },
         {
-          accessToken: pageAccessToken,
-          providerAccountId: pageId,
-          profileName: pageName,
+          providerAccountId: defaultPage.pageId, 
+          accessToken: defaultPage.accessToken,  
+          profileName: fbUserName, // 🚨 FIXED: Saves your real name, not the page name
+          defaultPageId: defaultPage.pageId,     
+          pages: allPages,                       
           updatedAt: new Date()
         },
         { upsert: true, new: true }
