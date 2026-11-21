@@ -1,9 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, ReactNode } from "react";
 import { Alert as MuiAlert } from "@mui/material";
 
 // 1. We define exactly what props this alert is allowed to receive
 interface MuialertProps {
-  message: string;
+  message: ReactNode; // 🚨 UPDATED: Now accepts both plain strings and rich JSX (like your link!)
   severity: "success" | "error" | "info" | "warning";
   onClose: () => void;
   autoHideDuration?: number;

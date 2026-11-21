@@ -28,7 +28,8 @@ router.get('/auth/connections', authenticate, async (req, res) => {
       facebook: !!fbConnection,
       facebookProfileName: fbConnection ? fbConnection.profileName : null, // 🚨 FIXED: Now sending the name
       facebookPages: fbConnection && fbConnection.pages ? fbConnection.pages.map(p => ({ id: p.pageId, name: p.name })) : [],
-      defaultFacebookPageId: fbConnection ? fbConnection.defaultPageId : null
+      defaultFacebookPageId: fbConnection ? fbConnection.defaultPageId : null,
+      defaultFacebookPageName: defaultFacebookPageName
     });
   } catch (err) {
     console.error("Error fetching connections:", err);
