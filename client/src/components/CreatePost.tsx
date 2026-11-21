@@ -16,7 +16,6 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const LINKEDIN_DRAFT_KEY = `cute_post_linkedin_draft_${userData._id}`;
   const FACEBOOK_DRAFT_KEY = `cute_post_facebook_draft_${userData._id}`;
 
-  // 🚨 SECURITY CHECK: Hide social toggles for students
   const isStudent = userData?.Role?.toLowerCase() === "student";
   const hasAdminOverride = (userData as any)?.socialOverride === true; 
   const showSocialToggles = !isStudent || hasAdminOverride;
@@ -26,6 +25,8 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
+
+  const [fbPageName, setFbPageName] = useState("");
   
   const savedScheduleRaw = localStorage.getItem(SCHEDULE_DRAFT_KEY);
   let initialScheduleConfig = { isScheduled: false, syncTimes: true, times: { cute: "", linkedin: "", facebook: "" } };
@@ -54,7 +55,8 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
   const [hasDraft, setHasDraft] = useState(!!content || scheduleConfig.isScheduled);
 
   const [isUploading, setIsUploading] = useState(false);
-  const [alert, setAlert] = useState({ show: false, message: "", type: "success" as "success" | "error" });
+  //const [alert, setAlert] = useState({ show: false, message: "", type: "success" as "success" | "error" });
+  const [alert, setAlert] = useState<{ show: boolean; message: React.ReactNode; type: "success" | "error" }>({ show: false, message: "", type: "success" });
 
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   
@@ -71,6 +73,9 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
         const data = await res.json();
         setIsLinkedInConnected(data.linkedin); 
         setIsFacebookConnected(data.facebook); 
+        if (data.defaultFacebookPageName) {
+          setFbPageName(data.defaultFacebookPageName);
+        }
       } catch (err) {
         console.error("Failed to fetch social connections");
       }
@@ -178,8 +183,34 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
     if (isFacebookConnected) {
       const newState = !postToFacebook;
       setPostToFacebook(newState);
-      if (newState) localStorage.setItem(FACEBOOK_DRAFT_KEY, "true");
-      else localStorage.removeItem(FACEBOOK_DRAFT_KEY);
+      if (newState) {
+        localStorage.setItem(FACEBOOK_DRAFT_KEY, "true");
+        setAlert({ 
+          show: true, 
+          type: "success",
+          message: (
+            <div className="flex items-center gap-3">
+              <span>Posting to: <strong>{fbPageName || "Facebook Page"}</strong></span>
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/dashboard", { state: { targetView: "integrations" } });
+                }}
+                className="underline font-bold text-xs opacity-90 hover:opacity-100 transition-opacity"
+              >
+                Change
+              </button>
+            </div>
+          )
+        });
+
+        // Auto-hide the toast after 3 seconds so they have time to click it
+        setTimeout(() => {
+          setAlert(prev => ({ ...prev, show: false }));
+        }, 3000);
+      } else {
+        localStorage.removeItem(FACEBOOK_DRAFT_KEY);
+      }
     } else {
       try {
         const token = localStorage.getItem("jwtoken");

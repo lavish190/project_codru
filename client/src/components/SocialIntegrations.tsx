@@ -33,7 +33,6 @@ export default function SocialIntegrations({ userData }: IntegrationsProps) {
   const [facebookPages, setFacebookPages] = useState<{id: string, name: string}[]>([]);
   const [selectedPageId, setSelectedPageId] = useState<string>("");
 
-  // 1. Fetch real status from backend
   useEffect(() => {
     const fetchConnections = async () => {
       try {
@@ -50,7 +49,6 @@ export default function SocialIntegrations({ userData }: IntegrationsProps) {
             setSelectedPageId(data.defaultFacebookPageId || (data.facebookPages[0]?.id || ""));
           }
           
-          // If your backend returns profile details, map them here:
           setSocialProfiles({
             facebookName: data.facebookProfileName || "Facebook User",
             facebookPhoto: data.facebookPhoto || "",
@@ -67,7 +65,6 @@ export default function SocialIntegrations({ userData }: IntegrationsProps) {
     fetchConnections();
   }, []);
 
-  // 2. Handle Connect
   const handleConnect = async (provider: 'facebook' | 'linkedin') => {
     try {
       const token = localStorage.getItem("jwtoken");
@@ -75,36 +72,25 @@ export default function SocialIntegrations({ userData }: IntegrationsProps) {
         headers: { "Authorization": `Bearer ${token}` }
       });
       const data = await res.json();
-      if (data.url) window.location.href = data.url; // Redirect to OAuth
+      if (data.url) window.location.href = data.url; 
     } catch (error) {
       console.error(`Failed to initiate ${provider} connection`, error);
     }
   };
 
-  // 3. Handle Disconnect (Assuming you have a DELETE route, otherwise it resets UI state)
   const handleDisconnect = async (provider: 'facebook' | 'linkedin') => {
     if (!window.confirm(`Are you sure you want to disconnect ${provider === 'facebook' ? 'Meta' : 'LinkedIn'}?`)) return;
     try {
-      // Uncomment when you build the disconnect route:
-      // await fetch(`${import.meta.env.VITE_API}auth/${provider}/disconnect`, { method: 'DELETE', headers: { "Authorization": `Bearer ${localStorage.getItem("jwtoken")}` } });
       setConnections(prev => ({ ...prev, [provider]: false }));
     } catch (error) {
       console.error(`Failed to disconnect ${provider}`, error);
     }
   };
 
-  // 4. Handle Page Change + "Create Page" Intercept
   const handlePageChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newPageId = e.target.value;
-    
-    // Intercept "Create Page" action
-    if (newPageId === "create_new") {
-      window.open("https://www.facebook.com/pages/create", "_blank");
-      e.target.value = selectedPageId; // Reset dropdown to previous valid selection
-      return;
-    }
-
     setSelectedPageId(newPageId);
+    
     try {
       await fetch(`${import.meta.env.VITE_API}auth/facebook/default-page`, {
         method: "POST",
@@ -133,9 +119,7 @@ export default function SocialIntegrations({ userData }: IntegrationsProps) {
 
       <div className="p-6 space-y-6">
         
-        {/* =========================================
-            FACEBOOK INTEGRATION CARD
-        ========================================= */}
+        {/* FACEBOOK INTEGRATION */}
         <div className={`flex flex-col p-5 border rounded-2xl transition-all duration-300 ${connections.facebook ? 'border-[#1877F2]/20 bg-blue-50/30' : 'border-gray-200 bg-white hover:border-blue-200'}`}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             
@@ -196,22 +180,20 @@ export default function SocialIntegrations({ userData }: IntegrationsProps) {
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                 <div className="relative w-full max-w-sm">
                   <select
-                    value={selectedPageId}
+                    value={selectedPageId || ""}
                     onChange={handlePageChange}
                     className="w-full appearance-none bg-white border border-gray-200 text-gray-800 text-sm font-semibold rounded-xl px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-[#1877F2]/50 hover:border-blue-200 transition-colors cursor-pointer shadow-sm"
                   >
+                    <option value="" disabled>Select a Facebook Page...</option>
                     {facebookPages.map((page) => (
                       <option key={page.id} value={page.id}>{page.name}</option>
                     ))}
-                    <option disabled>──────────</option>
-                    <option value="create_new">+ Create a new Facebook Page</option>
                   </select>
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
                     <ChevronDown className="w-4 h-4" />
                   </div>
                 </div>
                 
-                {/* Fallback Text Link for better UX */}
                 <button 
                   onClick={() => window.open("https://www.facebook.com/pages/create", "_blank")}
                   className="text-xs font-semibold text-[#1877F2] hover:text-blue-700 flex items-center gap-1 transition-colors"
@@ -227,9 +209,7 @@ export default function SocialIntegrations({ userData }: IntegrationsProps) {
           )}
         </div>
 
-        {/* =========================================
-            LINKEDIN INTEGRATION CARD
-        ========================================= */}
+        {/* LINKEDIN INTEGRATION */}
         <div className={`flex flex-col p-5 border rounded-2xl transition-all duration-300 ${connections.linkedin ? 'border-[#0A66C2]/20 bg-blue-50/30' : 'border-gray-200 bg-white hover:border-blue-200'}`}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             

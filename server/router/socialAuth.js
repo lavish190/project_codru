@@ -14,6 +14,12 @@ router.get('/auth/connections', authenticate, async (req, res) => {
     
     const fbConnection = connections.find(c => c.provider === 'facebook' && c.accessToken);
     const liConnection = connections.find(c => c.provider === 'linkedin' && c.accessToken);
+
+    let defaultFacebookPageName = null;
+    if (fbConnection && fbConnection.pages && fbConnection.defaultPageId) {
+      const page = fbConnection.pages.find(p => p.pageId === fbConnection.defaultPageId);
+      if (page) defaultFacebookPageName = page.name;
+    }
     
     res.json({
       linkedin: !!liConnection,
