@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const User = require('../models/userSchema'); // Adjust path to your User model if needed
 const SocialConnection = require('../models/SocialConnection');
 const authenticate = require("../middleware/authenticate");
 
@@ -26,26 +27,47 @@ router.get('/auth/connections', authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 1. REDIRECT TO PROVIDER LOGIN
+// 1. REDIRECT TO PROVIDER LOGIN (WITH BACKEND ROLE SECURITY)
 // ==========================================
-router.get('/auth/:provider/connect', authenticate, (req, res) => {
-  const { provider } = req.params;
-  
-  if (provider === 'linkedin') {
-    const linkedInAuthUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${process.env.LINKEDIN_CLIENT_ID}&redirect_uri=${process.env.LINKEDIN_REDIRECT_URI}&scope=w_member_social%20profile%20openid&state=${req.userId}`; 
-    return res.json({ url: linkedInAuthUrl });
+router.get('/auth/:provider/connect', authenticate, async (req, res) => {
+  try {
+    const { provider } = req.params;
+    const userId = req.user ? req.user._id : req.userId;
+    
+    // 🚨 BACKEND SECURITY FIREWALL: Fetch user and verify role
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const isStudent = user.Role?.toLowerCase() === 'student' || user.role?.toLowerCase() === 'student';
+    const hasAdminOverride = user.socialOverride === true;
+
+    if (isStudent && !hasAdminOverride) {
+      return res.status(403).json({ 
+        error: "Access Denied: Students are not permitted to connect social media accounts without Admin override." 
+      });
+    }
+
+    // If they pass the security check, generate the Auth URL
+    if (provider === 'linkedin') {
+      const linkedInAuthUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${process.env.LINKEDIN_CLIENT_ID}&redirect_uri=${process.env.LINKEDIN_REDIRECT_URI}&scope=w_member_social%20profile%20openid&state=${userId}`; 
+      return res.json({ url: linkedInAuthUrl });
+    }
+
+    if (provider === 'facebook') {
+      const redirectUri = process.env.FACEBOOK_REDIRECT_URI;
+      const appId = process.env.FACEBOOK_APP_ID;
+      const scopes = 'pages_show_list,pages_read_engagement,pages_manage_posts,public_profile';
+
+      const fbAuthUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${userId}&scope=${scopes}`;
+      return res.json({ url: fbAuthUrl });
+    }
+
+    return res.status(400).json({ error: "Unsupported provider" });
+
+  } catch (error) {
+    console.error("Auth connect error:", error);
+    res.status(500).json({ error: "Server error during connection initialization" });
   }
-
-  if (provider === 'facebook') {
-    const redirectUri = process.env.FACEBOOK_REDIRECT_URI;
-    const appId = process.env.FACEBOOK_APP_ID;
-    const scopes = 'pages_show_list,pages_read_engagement,pages_manage_posts,public_profile';
-
-    const fbAuthUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${req.userId}&scope=${scopes}`;
-    return res.json({ url: fbAuthUrl });
-  }
-
-  return res.status(400).json({ error: "Unsupported provider" });
 });
 
 // ==========================================

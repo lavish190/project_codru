@@ -1598,5 +1598,39 @@ router.get("/admin/audit-log", authenticate, async (req, res) => {
   }
 });
 
+// ==========================================
+// ADMIN: TOGGLE STUDENT SOCIAL MEDIA ACCESS
+// ==========================================
+router.put('/admin/users/:userId/social-override', authenticate, async (req, res) => {
+  try {
+    // 1. Verify the person making the request is actually an admin
+    const adminUser = await User.findById(req.user ? req.user._id : req.userId);
+    if (!adminUser || !adminUser.isAdmin) {
+      return res.status(403).json({ error: "Access Denied: Admin privileges required." });
+    }
+
+    const { userId } = req.params;
+    const { socialOverride } = req.body; // Expecting true or false
+
+    // 2. Find the target student and update them
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: "Student not found." });
+    }
+
+    targetUser.socialOverride = socialOverride;
+    await targetUser.save();
+
+    res.json({ 
+      success: true, 
+      message: `Social media access ${socialOverride ? 'granted to' : 'revoked from'} ${targetUser.Name || 'student'}.`
+    });
+
+  } catch (error) {
+    console.error("Error updating social override:", error);
+    res.status(500).json({ error: "Server error while updating privileges." });
+  }
+});
+
 
 module.exports = router;

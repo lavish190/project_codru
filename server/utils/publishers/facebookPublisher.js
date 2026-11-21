@@ -5,13 +5,33 @@ const publishToFacebook = async (post) => {
   // Grab the Facebook connection for this user
   const connection = await SocialConnection.findOne({ userId: post.userId, provider: 'facebook' });
   
-  if (!connection || !connection.accessToken || !connection.providerAccountId) {
-    throw new Error("Facebook Page token or Page ID not found.");
+  if (!connection) {
+    throw new Error("Facebook connection not found.");
   }
 
-  const pageId = connection.providerAccountId;
-  const pageToken = connection.accessToken;
-  
+  let pageId, pageToken;
+
+  // 🚨 NEW LOGIC: Find the specific page the user selected
+  if (connection.pages && connection.pages.length > 0) {
+    // Look for their default page, otherwise fallback to the first page in the list
+    const targetPageId = connection.defaultPageId || connection.pages[0].pageId;
+    const targetPage = connection.pages.find(p => p.pageId === targetPageId);
+
+    if (!targetPage || !targetPage.accessToken) {
+      throw new Error("Access token for the selected Facebook Page is missing.");
+    }
+
+    pageId = targetPage.pageId;
+    pageToken = targetPage.accessToken;
+  } else {
+    // 🚨 FALLBACK: Legacy support for old connections before we added the dropdown
+    if (!connection.accessToken || !connection.providerAccountId) {
+      throw new Error("Facebook Page token or Page ID not found.");
+    }
+    pageId = connection.providerAccountId;
+    pageToken = connection.accessToken;
+  }
+
   // Facebook expects raw text, so we strip HTML tags
   const plainTextContent = formatHtmlForLinkedIn(post.content || '');
 

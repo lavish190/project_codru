@@ -8,23 +8,32 @@ const socialConnectionSchema = new mongoose.Schema({
   },
   provider: { 
     type: String, 
-    enum: ['linkedin', 'substack', 'meta', 'x'], // Ready for future platforms
+    enum: ['linkedin', 'facebook', 'substack', 'meta', 'x'], // Added 'facebook'
     required: true 
   },
   providerAccountId: { 
     type: String, 
     required: true 
-  }, // e.g., LinkedIn Person URN
-  profileName: String, // Useful to show "Connected as [Name]" in your UI
+  }, // e.g., LinkedIn Person URN or FB User ID
+  profileName: String, 
   accessToken: { 
     type: String, 
     required: true 
   },
   refreshToken: String,
-  tokenExpiresAt: Date, // LinkedIn tokens expire after 60 days
+  tokenExpiresAt: Date, 
+  
+  // 🚨 NEW: Facebook Pages Support
+  defaultPageId: {
+    type: String
+  },
+  pages: [{
+    pageId: String,
+    name: String,
+    accessToken: String
+  }]
 }, { timestamps: true });
 
-// Ensure a user can only have ONE connection per platform
 socialConnectionSchema.index({ userId: 1, provider: 1 }, { unique: true });
 
 module.exports = mongoose.model('SocialConnection', socialConnectionSchema);

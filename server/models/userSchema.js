@@ -24,6 +24,7 @@ const userSchema = new mongoose.Schema({
   isAdmin: { type: Boolean, default: false },
   role: { type: String, default: "User" }, 
   isBanned: { type: Boolean, default: false },
+  socialOverride: { type: Boolean, default: false }, // 🚨 NEW: Admin toggle for student social media access
 
   // ==========================================
   // 2. SOCIAL & COMMUNITY 
@@ -32,11 +33,12 @@ const userSchema = new mongoose.Schema({
   savedPosts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
   followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   following: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-// 1. IN-APP HISTORY (The "Bell" Icon)
+  
+  // 1. IN-APP HISTORY (The "Bell" Icon)
   notifications: [{
     message: { type: String, required: true },
-    link: { type: String, default: "" }, // 🚨 NEW: For clickability
-    type: { type: String, default: "info" }, // 🚨 NEW: To style icons (like/handshake/alert)
+    link: { type: String, default: "" }, 
+    type: { type: String, default: "info" }, 
     date: { type: String },
     isRead: { type: Boolean, default: false },
     triggeredBy: { type: String, default: "System" },
@@ -127,7 +129,6 @@ const userSchema = new mongoose.Schema({
       h: { type: String, default: 'md' }    // Height: 'sm', 'md', or 'lg'
     }
   ]
-
 
 }, { timestamps: true });
 
