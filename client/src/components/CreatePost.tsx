@@ -185,18 +185,24 @@ const CreatePost = ({ userData, onPostCreated }: CreatePostProps) => {
       setPostToFacebook(newState);
       if (newState) {
         localStorage.setItem(FACEBOOK_DRAFT_KEY, "true");
+        // 🚨 TRIGGER THE ACTIONABLE TOAST (WITH TRUNCATION)
         setAlert({ 
           show: true, 
           type: "success",
           message: (
-            <div className="flex items-center gap-3">
-              <span>Posting to: <strong>{fbPageName || "Facebook Page"}</strong></span>
+            <div className="flex items-center justify-between gap-3 w-full overflow-hidden">
+              <div className="flex items-center gap-1.5 overflow-hidden">
+                <span className="shrink-0 whitespace-nowrap">Posting to:</span>
+                <strong className="truncate" title={fbPageName || "Facebook Page"}>
+                  {fbPageName || "Facebook Page"}
+                </strong>
+              </div>
               <button 
                 onClick={(e) => {
                   e.preventDefault();
                   navigate("/dashboard", { state: { targetView: "integrations" } });
                 }}
-                className="underline font-bold text-xs opacity-90 hover:opacity-100 transition-opacity"
+                className="shrink-0 underline font-bold text-xs opacity-90 hover:opacity-100 transition-opacity"
               >
                 Change
               </button>
