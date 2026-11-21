@@ -682,7 +682,7 @@ const Dashboard = ({ userData, setUserData }: DashboardProps) => {
           <div className={`relative flex-1 min-h-0 flex flex-col bg-white transition-all duration-300
               rounded-t-4xl md:rounded-4xl border-t md:border border-gray-100 border-x-0 md:border-x
               shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] md:shadow-xl
-              ${(currentView === "report" || currentView === "whatsapp-crm" || currentView === "schedule") 
+              ${(currentView === "report" || currentView === "whatsapp-crm" || currentView === "schedule" || currentView === "integrations") 
                   ? "p-0 overflow-hidden" : "pt-4 px-4 md:pt-6 md:px-6 overflow-y-auto dashboard-content-scroll"}
           `}>
             <div className={`relative w-full ${(currentView === "report" || currentView === "whatsapp-crm" || currentView === "schedule") 
