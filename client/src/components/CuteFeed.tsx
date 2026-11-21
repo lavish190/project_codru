@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import Muialert from "./Muialert";
-import { Loader2, Edit3, X, Globe, Clock } from "lucide-react"; // 🚨 Added icons for edit modal
+import { Loader2, Edit3, X, Globe, Clock } from "lucide-react";
 import { UserData } from "../App";
 import PostCard from "./PostCard"; 
-import RichTextEditor from "./RichTextEditor"; // 🚨 Needed for Edit modal
+import RichTextEditor from "./RichTextEditor"; 
 
 interface CuteFeedProps {
   userData: UserData;
@@ -70,13 +70,96 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
     fetchAllFeedData();
   }, [refreshTrigger]);
 
-  const handleLike = async (postId: string) => { /* ...existing logic... */ };
-  const handleSave = async (postId: string) => { /* ...existing logic... */ };
-  const handleFollow = async (targetUsername: string) => { /* ...existing logic... */ };
-  const handleDeletePost = async (postId: string) => { /* ...existing logic... */ };
-  const handleCommentSubmit = useCallback(async (postId: string, text: string, parentId?: string) => { /* ...existing logic... */ }, [isSubmitting]);
+  // 🚨 RESTORED: Like Function
+  const handleLike = async (postId: string) => {
+    setPosts(prevPosts => prevPosts.map(p => {
+      if (p._id !== postId) return p;
+      const isLiked = p.likedBy?.some((u: any) => (u._id || u) === currentUserId);
+      return {
+        ...p,
+        likes: isLiked ? Math.max(0, p.likes - 1) : p.likes + 1,
+        likedBy: isLiked ? p.likedBy.filter((u: any) => (u._id || u) !== currentUserId) : [...(p.likedBy || []), currentUserId]
+      };
+    }));
 
-  // 🚨 NEW: Handle Edit Click (Passed to PostCard)
+    try {
+      const token = localStorage.getItem("jwtoken");
+      await fetch(`${import.meta.env.VITE_API}posts/${postId}/like`, { method: "POST", headers: { "Authorization": `Bearer ${token}` } });
+    } catch (error) {
+      console.error("Failed to like post", error);
+    }
+  };
+
+  // 🚨 RESTORED: Save Function
+  const handleSave = async (postId: string) => {
+    const isSaved = savedPostIds.includes(postId);
+    setSavedPostIds(prev => isSaved ? prev.filter(id => id !== postId) : [...prev, postId]);
+
+    try {
+      const token = localStorage.getItem("jwtoken");
+      await fetch(`${import.meta.env.VITE_API}posts/${postId}/save`, { method: "POST", headers: { "Authorization": `Bearer ${token}` } });
+    } catch (error) {
+      console.error("Failed to save post", error);
+    }
+  };
+
+  // 🚨 RESTORED: Follow Function
+  const handleFollow = async (targetUsername: string) => {
+    setFollowingUsernames(prev => [...prev, targetUsername]);
+    try {
+      const token = localStorage.getItem("jwtoken");
+      await fetch(`${import.meta.env.VITE_API}follow`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ currentUserId: currentUsername, targetUserId: targetUsername })
+      });
+    } catch (error) {
+      setFollowingUsernames(prev => prev.filter(u => u !== targetUsername));
+    }
+  };
+
+  // 🚨 RESTORED: Delete Function
+  const handleDeletePost = async (postId: string) => {
+    if (!window.confirm("Are you sure you want to delete this post?")) return;
+    
+    const originalPosts = [...posts];
+    setPosts(prev => prev.filter(p => p._id !== postId));
+
+    try {
+      const token = localStorage.getItem("jwtoken");
+      const res = await fetch(`${import.meta.env.VITE_API}posts/${postId}`, { method: "DELETE", headers: { "Authorization": `Bearer ${token}` } });
+      if (!res.ok) throw new Error("Failed to delete");
+    } catch (err) {
+      console.error("Failed to delete", err);
+      setPosts(originalPosts); 
+      setAlert({ show: true, message: "Failed to delete post", type: "error" });
+    }
+  };
+
+  // 🚨 RESTORED: Comment Submit Function
+  const handleCommentSubmit = useCallback(async (postId: string, text: string, parentId?: string) => {
+    if (!text.trim() || isSubmitting[postId]) return;
+    setIsSubmitting(prev => ({ ...prev, [postId]: true }));
+
+    try {
+      const token = localStorage.getItem("jwtoken");
+      const res = await fetch(`${import.meta.env.VITE_API}posts/${postId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ text, parentId })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPosts(prev => prev.map(p => p._id === postId ? { ...p, comments: data.comments } : p));
+      }
+    } catch (error) {
+      setAlert({ show: true, message: "Failed to post comment", type: "error" });
+    } finally {
+      setIsSubmitting(prev => ({ ...prev, [postId]: false }));
+    }
+  }, [isSubmitting]);
+
+  // Edit Click Handler (Opens Modal)
   const handleEditClick = (post: any) => {
     setEditContent(post.content); 
     
@@ -92,7 +175,7 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
     setPostToEdit(post); 
   };
 
-  // 🚨 NEW: Save Edit to Server
+  // Save Edit to Server
   const saveEdit = async () => {
     if (!postToEdit) return;
     try {
@@ -150,7 +233,7 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
             onLike={handleLike} 
             onSave={handleSave} 
             onDelete={handleDeletePost}
-            onEdit={handleEditClick} // 🚨 Pass edit handler to PostCard
+            onEdit={handleEditClick} 
             onFollow={handleFollow}
             savedPostIds={savedPostIds}
             followingUsernames={followingUsernames}
@@ -159,7 +242,7 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
         ))
       )}
       
-      {/* 🚨 RICH TEXT EDIT MODAL (Copied exactly from MyPosts) */}
+      {/* 🚨 RICH TEXT EDIT MODAL */}
       {postToEdit && (
         <div className="fixed inset-0 z-[1050] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPostToEdit(null)}>
           <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[95dvh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -171,7 +254,7 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
               <div className="border border-brand-orange/50 rounded-xl overflow-hidden min-h-[250px] flex flex-col">
                 <RichTextEditor value={editContent} onChange={(html) => setEditContent(html)} showToolbar={true} className="flex-1" />
               </div>
-              {/* LINKEDIN TOGGLE & SYNC SETTINGS */}
+              
               {postToEdit.status === "scheduled" && (
                 <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-4 shrink-0">
                   <div className="flex items-center justify-between">
@@ -190,7 +273,6 @@ const CuteFeed = ({ userData, refreshTrigger }: CuteFeedProps) => {
                 </div>
               )}
               
-              {/* DATE PICKERS */}
               <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-4 shrink-0">
                 <div>
                   <label className="block text-xs font-bold text-brand-blue uppercase tracking-widest mb-2 flex items-center gap-2">
