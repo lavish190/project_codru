@@ -236,8 +236,9 @@ const startAllCronJobs = (app) => {
       // --- D. HANDLE BLOG PUBLISHING ---
       const dueBlogs = await Blog.find({ 
         status: "scheduled", 
-        scheduledFor: { $lte: now } 
+        scheduledFor: { $lte: now, $ne: null } 
       });
+
 
       let triggeredBlogWebhook = false;
 

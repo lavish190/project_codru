@@ -144,7 +144,7 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
     localStorage.removeItem("marketing_blog_draft");
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !summary.trim() || isContentEmpty || (!imageFile && !imagePreview)) {
       setAlert({ show: true, message: "Please fill in all fields and add a cover image.", type: "error" });
@@ -153,6 +153,18 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
     if (cta.enabled && !cta.text.trim()) {
       setAlert({ show: true, message: "Please provide text for the CTA button.", type: "error" });
       return;
+    }
+
+    // 🚨 1. VALIDATE SCHEDULE TIME
+    if (scheduleConfig.isScheduled) {
+      if (!scheduleConfig.time) {
+        setAlert({ show: true, message: "Please select a publish date and time.", type: "error" });
+        return;
+      }
+      if (new Date(scheduleConfig.time) <= new Date()) {
+        setAlert({ show: true, message: "Scheduled time must be in the future.", type: "error" });
+        return;
+      }
     }
 
     setIsPublishing(true);
@@ -192,8 +204,9 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({
           title, summary, content, coverImage: finalImageUrl, category, authorName,
-          isScheduled: scheduleConfig.isScheduled, // 🚨 Pass schedule info
-          scheduledFor: scheduleConfig.time,       // 🚨 Pass schedule time
+          isScheduled: scheduleConfig.isScheduled, 
+          // 🚨 2. CONVERT TO UTC ISO STRING BEFORE SENDING
+          scheduledFor: scheduleConfig.isScheduled && scheduleConfig.time ? new Date(scheduleConfig.time).toISOString() : null, 
           promoteOnCute,         
           promoteOnLinkedIn,
           cta: {
@@ -205,7 +218,15 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
       });
 
       if (!response.ok) throw new Error(`Failed to ${isEditMode ? "update" : "publish"} blog`);
-      setAlert({ show: true, message: `Blog ${isEditMode ? "updated" : "published"}! Cloudflare is rebuilding.`, type: "success" });
+      
+      // 🚨 3. ACCURATE SUCCESS MESSAGE
+      setAlert({ 
+        show: true, 
+        message: scheduleConfig.isScheduled 
+          ? "Blog scheduled successfully!" 
+          : `Blog ${isEditMode ? "updated" : "published"}! Cloudflare is rebuilding.`, 
+        type: "success" 
+      });
       setTimeout(() => resetForm(), 1500);
 
     } catch (error: any) {

@@ -839,8 +839,17 @@ router.post("/blogs", authenticate, async (req, res) => {
     const uniqueId = Math.random().toString(36).substring(2, 6);
     const slug = `${baseSlug}-${uniqueId}`;
     
-    const status = isScheduled ? "scheduled" : "published";
-    const parsedDate = isScheduled && scheduledFor ? new Date(scheduledFor) : null;
+    // 🚨 BACKEND SCHEDULING FIREWALL
+    let status = "published";
+    let parsedDate = null;
+
+    if (isScheduled && scheduledFor) {
+      parsedDate = new Date(scheduledFor);
+      if (parsedDate > new Date()) {
+        status = "scheduled";
+      }
+    }
+
 
     // 2. CREATE BLOG
     const newBlog = new Blog({
