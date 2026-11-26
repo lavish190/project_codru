@@ -141,6 +141,7 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
     setCategory("Academics"); setImageFile(null); setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setCta({ ...cta, enabled: false, newIconFile: null });
+    setScheduleConfig({ isScheduled: false, time: "" });
     localStorage.removeItem("marketing_blog_draft");
   };
 
@@ -243,7 +244,7 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
 
   return (
     <>
-      <style>
+            <style>
         {`
           /* 🚨 PERFECT MATCH TO RICH TEXT EDITOR CSS */
           .tiptap-content h1 { font-size: 2.25rem; font-weight: 900; line-height: 1.2; margin-bottom: 1rem; margin-top: 1.5rem; color: #111827; }
@@ -255,10 +256,20 @@ const CreateBlog = ({ userData, editBlogData, onEditComplete }: CreateBlogProps)
           .tiptap-content p:last-child { margin-bottom: 0; }
           .tiptap-content strong { font-weight: bold; }
           .tiptap-content em { font-style: italic; }
+          .tiptap-content u { text-decoration: underline; }
           .tiptap-content s { text-decoration: line-through; }
+          .tiptap-content mark { background-color: #fef08a; padding: 0.1rem 0.25rem; border-radius: 0.25rem; }
           .tiptap-content a { color: #1765a4; text-decoration: underline; cursor: pointer; }
+          .tiptap-content blockquote { border-left: 4px solid #ed7f23; background: #fff7ed; padding: 0.75rem 1rem; margin: 1.25rem 0; border-radius: 0 0.75rem 0.75rem 0; font-style: italic; color: #374151; }
+          .tiptap-content pre { background: #0f172a; color: #f8fafc; padding: 1rem; border-radius: 0.75rem; overflow-x: auto; margin: 1.25rem 0; font-family: monospace; font-size: 0.9rem; }
+          .tiptap-content hr { border: none; border-top: 2px solid #e2e8f0; margin: 1.75rem 0; }
+          .tiptap-content img { max-width: 100%; height: auto; border-radius: 1rem; margin: 1.5rem auto; display: block; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+          .tiptap-content table { border-collapse: collapse; width: 100%; margin: 1.5rem 0; display: block; overflow-x: auto; }
+          .tiptap-content td, .tiptap-content th { border: 1px solid #cbd5e1; padding: 0.65rem 0.85rem; text-align: left; vertical-align: top; }
+          .tiptap-content th { font-weight: 700; background-color: #f8fafc; color: #1e293b; }
         `}
       </style>
+
       
       <div className="w-full pb-10">
         {!isEditMode && (
