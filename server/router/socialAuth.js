@@ -76,7 +76,7 @@ router.get('/auth/:provider/connect', authenticate, async (req, res) => {
         `&config_id=${process.env.FACEBOOK_CONFIG_ID}` +
         `&response_type=code` +
         `&override_default_response_type=true` +
-        `&state=${state}`;
+        `&state=${userId}`;
 
       return res.json({ url: fbAuthUrl });
     }
@@ -159,25 +159,39 @@ router.get('/auth/:provider/callback', async (req, res) => {
       const appId = process.env.FACEBOOK_APP_ID;
       const appSecret = process.env.FACEBOOK_APP_SECRET;
 
-      const tokenRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${redirectUri}&client_secret=${appSecret}&code=${code}`);
+      const tokenParams = new URLSearchParams({
+        client_id: appId,
+        redirect_uri: redirectUri,
+        client_secret: appSecret,
+        code: String(code),
+      });
+
+      const tokenRes = await fetch(`https://graph.facebook.com/v27.0/oauth/access_token?${tokenParams.toString()}`);
       const tokenData = await tokenRes.json();
       if (tokenData.error) throw new Error(tokenData.error.message);
       
       const shortLivedToken = tokenData.access_token;
 
-      const longLivedRes = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${shortLivedToken}`);
+      const longLivedParams = new URLSearchParams({
+        grant_type: 'fb_exchange_token',
+        client_id: appId,
+        client_secret: appSecret,
+        fb_exchange_token: shortLivedToken,
+      });
+
+      const longLivedRes = await fetch(`https://graph.facebook.com/v27.0/oauth/access_token?${longLivedParams.toString()}`);
       const longLivedData = await longLivedRes.json();
       if (longLivedData.error) throw new Error(longLivedData.error.message);
       
       const longLivedToken = longLivedData.access_token;
 
-      // 🚨 NEW: Fetch the user's actual personal name from Facebook
-      const meRes = await fetch(`https://graph.facebook.com/v19.0/me?fields=name&access_token=${longLivedToken}`);
+      // Fetch the user's actual personal name from Facebook
+      const meRes = await fetch(`https://graph.facebook.com/v27.0/me?fields=name&access_token=${encodeURIComponent(longLivedToken)}`);
       const meData = await meRes.json();
       const fbUserName = meData.name || "Facebook User";
 
       // Fetch the User's Pages
-      const pagesRes = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${longLivedToken}`);
+      const pagesRes = await fetch(`https://graph.facebook.com/v27.0/me/accounts?access_token=${encodeURIComponent(longLivedToken)}`);
       const pagesData = await pagesRes.json();
 
       if (!pagesData.data || pagesData.data.length === 0) {
@@ -197,7 +211,7 @@ router.get('/auth/:provider/callback', async (req, res) => {
         {
           providerAccountId: defaultPage.pageId, 
           accessToken: defaultPage.accessToken,  
-          profileName: fbUserName, // 🚨 FIXED: Saves your real name, not the page name
+          profileName: fbUserName,
           defaultPageId: defaultPage.pageId,     
           pages: allPages,                       
           updatedAt: new Date()
