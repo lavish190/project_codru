@@ -69,7 +69,15 @@ router.get('/auth/:provider/connect', authenticate, async (req, res) => {
       const appId = process.env.FACEBOOK_APP_ID;
       const scopes = 'pages_show_list,pages_read_engagement,pages_manage_posts,public_profile';
 
-      const fbAuthUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${userId}&scope=${scopes}`;
+      const fbAuthUrl =
+        `https://www.facebook.com/v21.0/dialog/oauth` +
+        `?client_id=${process.env.FACEBOOK_APP_ID}` +
+        `&redirect_uri=${encodeURIComponent(process.env.FACEBOOK_REDIRECT_URI)}` +
+        `&config_id=${process.env.FACEBOOK_CONFIG_ID}` +
+        `&response_type=code` +
+        `&override_default_response_type=true` +
+        `&state=${state}`;
+
       return res.json({ url: fbAuthUrl });
     }
 
